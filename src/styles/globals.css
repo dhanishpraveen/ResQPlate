@@ -1,0 +1,65 @@
+@import "tailwindcss";
+@import "./tokens.css";
+@import "./typography.css";
+@import "./utilities.css";
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+  background: var(--color-page);
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--color-page);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+img,
+svg {
+  display: block;
+}
+
+dialog {
+  color: inherit;
+}
+
+dialog::backdrop {
+  background: rgb(9 31 19 / 45%);
+  backdrop-filter: blur(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

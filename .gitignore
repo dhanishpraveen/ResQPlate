@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Local environment files; keep the safe template tracked.
+.env
+.env.*
+!.env.example
+
+# Test and coverage output
+coverage/
+playwright-report/
+test-results/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Local caches and generated tooling data
+.vite/
+.turbo/
+.cache/
+.eslintcache
+.stylelintcache
+
+# Supabase local development state
+supabase/.temp/
+
+# Credentials, certificates, and private keys
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+
+# Editor and operating-system files
+.vscode/*
+!.vscode/mcp.json
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+.copilot
+.github
+docs/*
+
+# Keep the required project guidance and documentation version-controlled.
+!.github/
+!.github/copilot-instructions.md
+!docs/
+!docs/**

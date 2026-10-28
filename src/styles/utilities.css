@@ -1,0 +1,34 @@
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+  border: 0;
+}
+
+.u-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.u-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.u-muted {
+  color: var(--color-text-secondary);
+}
+
+.u-surface {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
