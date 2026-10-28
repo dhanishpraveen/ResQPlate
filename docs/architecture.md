@@ -2,13 +2,13 @@
 
 ## Status and scope
 
-This is a proposed architecture for the repository's approved React,
-TypeScript, Vite, Tailwind CSS, and Supabase stack. It describes candidate
-boundaries and requirements inferred from the project brief and the visually
-inspected reference; it is not a verified schema or a claim that a Supabase
-project exists. Screen-specific ambiguities are documented in
-`docs/design/design-inventory.md`. No SQL migrations or seed data are created
-in the foundation phase.
+This document describes the React, TypeScript, Vite, Tailwind CSS, and
+Supabase architecture as it is being implemented. Authentication/onboarding
+and donor workflows have frontend implementations and version-controlled
+migration drafts. The migrations have not been applied or tested against
+PostgreSQL, and no live Supabase connection is verified. Screen-specific
+ambiguities and visual approximations are documented in
+`docs/design/design-inventory.md`.
 
 ## System overview
 
@@ -127,6 +127,27 @@ Candidate notification triggers include request submission and decision,
 assignment/acceptance, collection, delivery, receipt confirmation, and
 cancellation or material status changes. Confirm recipients, channels,
 preferences, retries, and privacy before implementing.
+
+### Implemented donor-phase contract (draft)
+
+The donor migration draft defines donation states `draft`, `available`,
+`claimed`, `picked_up`, `completed`, and `cancelled`; request states
+`pending`, `confirmed`, `declined`, `picked_up`, `completed`, and `cancelled`.
+Database RPCs are intended to own donor decisions, cancellation, handover, and
+NGO receipt transitions. This SQL is not applied or database-tested.
+
+For this phase, an NGO request must equal the whole listed quantity; partial
+requests and discrepancy handling are intentionally unsupported. Donor
+handover records that quantity, and only a verified NGO can later confirm the
+same full quantity as received. Impact reports include completed,
+recipient-confirmed records only: explicit `servings` count as meals and `kg`
+is reported as food weight. `portions` and `items` are not converted into
+meals. People-fed and CO₂ metrics remain unavailable because verified counts
+and an approved conversion factor are not supplied. Notification delivery
+and preferences are not implemented.
+
+See `docs/authentication.md` for the current route, schema-draft, and workflow
+details and for the unverified backend boundary.
 
 ## Security model
 

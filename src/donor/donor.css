@@ -1,0 +1,751 @@
+.donor-dashboard-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.donor-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.donor-promo-banner {
+  position: relative;
+  display: flex;
+  min-height: 12rem;
+  align-items: center;
+  justify-content: space-between;
+  overflow: hidden;
+  padding: clamp(var(--space-5), 4vw, var(--space-8));
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(ellipse at 86% 130%, #a8d64e 0 18%, transparent 18.5%),
+    radial-gradient(ellipse at 95% 100%, #72bd32 0 24%, transparent 24.5%),
+    linear-gradient(110deg, #08733a, #07532f 76%);
+  color: #fff;
+}
+
+.donor-promo-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 35rem;
+}
+
+.donor-promo-eyebrow {
+  color: rgb(255 255 255 / 82%);
+  font-size: var(--text-xs);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.donor-promo-copy h2 {
+  margin: var(--space-2) 0;
+  font-size: clamp(var(--text-xl), 3vw, var(--text-2xl));
+}
+
+.donor-promo-copy p {
+  max-width: 30rem;
+  margin: 0 0 var(--space-4);
+  color: rgb(255 255 255 / 88%);
+  font-size: var(--text-sm);
+  line-height: var(--line-normal);
+}
+
+.donor-promo-copy .ui-button {
+  background: #fff;
+  border-color: #fff;
+  color: var(--color-brand-900);
+}
+
+.donor-promo-art {
+  position: relative;
+  display: grid;
+  width: 10rem;
+  height: 8rem;
+  flex: 0 0 auto;
+  place-items: center;
+  margin-right: 1rem;
+  border: 1px solid rgb(255 255 255 / 25%);
+  border-radius: 48% 52% 56% 44%;
+  background: rgb(255 255 255 / 12%);
+  color: #e7f7eb;
+  transform: rotate(-8deg);
+}
+
+.donor-promo-leaf {
+  position: absolute;
+  right: -1rem;
+  bottom: -0.5rem;
+  color: #c3e66b;
+  transform: rotate(30deg);
+}
+
+.donor-dashboard-lower {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(19rem, 0.85fr);
+  gap: var(--space-5);
+}
+
+.donor-dashboard-card {
+  min-width: 0;
+}
+
+.donor-dashboard-card > .ui-section-heading {
+  margin-bottom: var(--space-4);
+}
+
+.donor-recent-list,
+.donor-donation-list,
+.donor-request-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.donor-recent-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-decoration: none;
+}
+
+.donor-recent-row:hover {
+  background: var(--color-surface-muted);
+}
+
+.donor-food-image {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  background: #eaf5ed;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-brand-800);
+}
+
+.donor-food-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+img.donor-food-image {
+  display: block;
+}
+
+.donor-food-placeholder {
+  gap: 0.2rem;
+  color: var(--color-text-muted);
+  font-size: 0.625rem;
+  text-align: center;
+}
+
+.donor-food-placeholder span {
+  max-width: 5rem;
+}
+
+.donor-recent-photo {
+  width: 3.125rem;
+  height: 3.125rem;
+}
+
+.donor-recent-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.donor-recent-copy strong {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.donor-recent-copy small,
+.donor-chart-note {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.donor-monthly-chart {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr;
+  min-height: 13rem;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.donor-chart-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0 0 var(--space-8);
+  color: var(--color-text-muted);
+  font-size: 0.625rem;
+  text-align: right;
+}
+
+.donor-chart-bars {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--color-border-strong);
+}
+
+.donor-chart-month {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  color: var(--color-text-secondary);
+  font-size: 0.65rem;
+}
+
+.donor-chart-month strong,
+.donor-chart-month small {
+  font-size: inherit;
+  font-weight: 500;
+}
+
+.donor-chart-month small {
+  color: var(--color-text-muted);
+}
+
+.donor-chart-bar-track {
+  display: flex;
+  width: min(2rem, 70%);
+  height: 8rem;
+  align-items: flex-end;
+  overflow: hidden;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--color-brand-50);
+}
+
+.donor-chart-bar {
+  width: 100%;
+  min-height: 0.2rem;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: linear-gradient(180deg, var(--color-brand-500), var(--color-brand-800));
+}
+
+.donor-text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-brand-800);
+  font-size: var(--text-xs);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.donor-button-link {
+  color: var(--color-brand-800);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.donor-filter-tabs {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  margin: 0 0 var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.donor-filter-tabs button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  padding: 0 var(--space-3);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.donor-filter-tabs button.is-selected {
+  border-bottom-color: var(--color-brand-600);
+  color: var(--color-brand-800);
+  font-weight: 650;
+}
+
+.donor-filter-tabs button > span {
+  display: inline-grid;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  place-items: center;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-size: 0.65rem;
+}
+
+.donor-listing-card {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.donor-listing-photo {
+  width: 5.5rem;
+  height: 5.5rem;
+}
+
+.donor-listing-main {
+  min-width: 0;
+}
+
+.donor-listing-heading,
+.donor-request-card-header,
+.donor-detail-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.donor-listing-heading h3,
+.donor-request-card-header h2 {
+  overflow: hidden;
+  font-size: var(--text-md);
+  text-overflow: ellipsis;
+}
+
+.donor-listing-main > p,
+.donor-request-card-header p {
+  margin: var(--space-1) 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.donor-listing-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.donor-listing-meta span,
+.donor-request-card-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.donor-listing-actions,
+.donor-request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.donor-form-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.35fr);
+  align-items: start;
+  gap: var(--space-5);
+}
+
+.donor-form-main,
+.donor-form-aside,
+.donor-handover-side {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.donor-form-fields {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.donor-form-wide {
+  grid-column: 1 / -1;
+}
+
+.donor-form-quantity {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(9rem, 0.6fr);
+  gap: var(--space-3);
+}
+
+.donor-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.donor-form-aside .ui-section-heading {
+  margin-bottom: var(--space-3);
+}
+
+.donor-guideline-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-left: 1.25rem;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--line-normal);
+}
+
+.donor-aside-note {
+  margin-top: var(--space-3);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--line-normal);
+}
+
+.donor-upload-control {
+  display: flex;
+  min-height: 4.5rem;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  color: var(--color-brand-800);
+  cursor: pointer;
+}
+
+.donor-upload-control:hover {
+  border-color: var(--color-brand-600);
+  background: var(--color-brand-50);
+}
+
+.donor-upload-control input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.donor-upload-control span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.donor-form-photo-preview {
+  width: min(100%, 20rem);
+  max-height: 15rem;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+}
+
+.donor-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(19rem, 0.9fr);
+  align-items: start;
+  gap: var(--space-5);
+}
+
+.donor-detail-card,
+.donor-detail-grid > .ui-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.donor-detail-photo {
+  width: 100%;
+  max-height: 20rem;
+  aspect-ratio: 16 / 8;
+}
+
+img.donor-detail-photo {
+  object-fit: cover;
+}
+
+.donor-detail-title h2 {
+  margin-top: var(--space-2);
+  font-size: var(--text-xl);
+}
+
+.donor-detail-title p,
+.donor-detail-card > p {
+  margin-top: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--line-normal);
+}
+
+.donor-detail-fields {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.donor-detail-field {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.donor-detail-field > span {
+  color: var(--color-brand-700);
+}
+
+.donor-detail-field small {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.donor-detail-field p {
+  margin-top: 0.1rem;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
+.donor-request-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+  color: inherit;
+  text-decoration: none;
+}
+
+.donor-request-summary > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.donor-request-summary small {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.donor-next-pickup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+  background: var(--color-brand-50);
+}
+
+.donor-next-pickup-icon {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--color-brand-100);
+  color: var(--color-brand-800);
+}
+
+.donor-next-pickup > div:nth-child(2) {
+  flex: 1;
+}
+
+.donor-next-pickup p,
+.donor-next-pickup small {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+}
+
+.donor-request-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.donor-request-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.donor-authorized-contact {
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+}
+
+.donor-contact-card {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  font-size: var(--text-sm);
+}
+
+.donor-contact-card p {
+  margin-top: var(--space-1);
+  color: var(--color-text-secondary);
+}
+
+.donor-handover-photo {
+  width: min(100%, 24rem);
+  max-height: 16rem;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+}
+
+.donor-cuisine-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.donor-cuisine-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+}
+
+.donor-cuisine-row strong {
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+}
+
+@media (max-width: 1050px) {
+  .donor-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .donor-form-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .donor-form-aside {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 800px) {
+  .donor-dashboard-lower,
+  .donor-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .donor-listing-card {
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+  }
+
+  .donor-listing-photo {
+    width: 4.5rem;
+    height: 4.5rem;
+  }
+
+  .donor-listing-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .donor-stat-grid {
+    gap: var(--space-2);
+  }
+
+  .donor-stat-grid .ui-card {
+    gap: var(--space-2);
+    padding: var(--space-3);
+  }
+
+  .donor-stat-grid .ui-icon-container {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .donor-promo-art {
+    position: absolute;
+    right: -2.5rem;
+    bottom: -2rem;
+    opacity: 0.4;
+  }
+
+  .donor-promo-copy {
+    max-width: 100%;
+  }
+
+  .donor-form-aside {
+    display: flex;
+  }
+
+  .donor-next-pickup {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .donor-next-pickup > div:nth-child(2) {
+    min-width: calc(100% - 4rem);
+  }
+
+  .donor-next-pickup > .ui-button {
+    margin-left: 3.5rem;
+  }
+
+  .donor-listing-card {
+    gap: var(--space-3);
+    padding: var(--space-3);
+  }
+
+  .donor-listing-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .donor-listing-meta {
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .donor-listing-actions {
+    grid-column: 1 / -1;
+  }
+
+  .donor-form-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+}

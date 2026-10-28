@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import {
   Bell,
   ChevronDown,
@@ -67,20 +68,17 @@ function Sidebar({
         </div>
         <nav aria-label={`${role} navigation`} className="layout-nav">
           {items.map(({ label, href, icon: Icon }) => (
-            <a
+            <Link
               aria-current={label === activeLabel ? "page" : undefined}
               className={`layout-nav-link ${label === activeLabel ? "is-active" : ""} ${label === "Logout" ? "layout-nav-link--logout" : ""}`}
-              href={href}
+              to={href}
               key={label}
-              onClick={(event) => {
-                event.preventDefault();
-                onNavigate();
-              }}
+              onClick={onNavigate}
             >
               <Icon aria-hidden="true" size={17} strokeWidth={1.8} />
               <span>{label}</span>
               {label === "Notifications" && <span aria-label="3 unread" className="layout-nav-count">3</span>}
-            </a>
+            </Link>
           ))}
         </nav>
         <p className="layout-sidebar-footnote">Food rescue. Shared impact.</p>
@@ -116,10 +114,10 @@ function AppHeader({
         <span className="layout-topbar-context">Workspace <span aria-hidden="true">/</span> <strong>{role}</strong></span>
       </div>
       <div className="layout-topbar-actions">
-        <IconButton className="layout-notification-button" label="Notifications, 3 unread">
+        <Link aria-label="Notifications" className="ui-icon-button layout-notification-button" to={`/${role}/notifications`}>
           <Bell size={19} />
           <span aria-hidden="true" />
-        </IconButton>
+        </Link>
         <button
           aria-expanded={profileOpen}
           className="layout-profile-button"
@@ -134,8 +132,8 @@ function AppHeader({
           <div className="layout-profile-menu">
             <span className="layout-profile-menu-name">{name}</span>
             <StatusBadge tone="success">Verified</StatusBadge>
-            <button onClick={() => setProfileOpen(false)} type="button">View profile</button>
-            <button onClick={() => setProfileOpen(false)} type="button">Settings</button>
+            <Link onClick={() => setProfileOpen(false)} to={`/${role}/profile`}>View profile</Link>
+            <Link onClick={() => setProfileOpen(false)} to={`/${role}/settings`}>Settings</Link>
           </div>
         )}
       </div>

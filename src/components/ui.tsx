@@ -476,6 +476,7 @@ export function ConfirmationDialog({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   destructive = false,
+  busy = false,
   onConfirm,
   onClose,
 }: {
@@ -485,6 +486,7 @@ export function ConfirmationDialog({
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
+  busy?: boolean;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -505,11 +507,16 @@ export function ConfirmationDialog({
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
-          onClose();
+          if (!busy) onClose();
         }
       }}
-      onCancel={onClose}
-      onClose={onClose}
+      onCancel={(event) => {
+        if (busy) event.preventDefault();
+        else onClose();
+      }}
+      onClose={() => {
+        if (!busy) onClose();
+      }}
       ref={dialogRef}
     >
       <div className="ui-dialog-icon"><TriangleAlert aria-hidden="true" size={22} /></div>
@@ -517,8 +524,8 @@ export function ConfirmationDialog({
       <h2 id="confirmation-title">{title}</h2>
       <p id="confirmation-description">{description}</p>
       <div className="ui-dialog-actions">
-        <Button onClick={onClose} variant="outline">{cancelLabel}</Button>
-        <Button onClick={onConfirm} variant={destructive ? "danger" : "primary"}>{confirmLabel}</Button>
+        <Button disabled={busy} onClick={onClose} variant="outline">{cancelLabel}</Button>
+        <Button loading={busy} onClick={onConfirm} variant={destructive ? "danger" : "primary"}>{confirmLabel}</Button>
       </div>
     </dialog>
   );

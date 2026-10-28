@@ -18,10 +18,10 @@ pages were rendered and visually reviewed. The reference does not identify an
 original font or provide separate source assets; these limitations and design
 ambiguities are recorded in `docs/design/design-inventory.md`.
 
-No Supabase project was connected, no account-level setup or MCP
-authentication was performed, no database migrations or seed records exist,
-and no product workflows or role dashboards have been implemented. These are
-not claimed as completed work.
+No live Supabase application connection or database access was verified.
+Authentication and donor workflows have since been implemented in the
+frontend, and two version-controlled migration drafts have been added. They
+remain unapplied and unverified against PostgreSQL; no seed data exists.
 
 Phase 1 establishes a centralized token layer, responsive shared app/auth
 shells, role-specific navigation configurations, accessible UI primitives,
@@ -56,6 +56,45 @@ milestone below after verification.
   source assets are supplied; revisit estimated tokens if the original design
   source becomes available. No complete workflow or role dashboard is in
   scope.
+
+### Phase 2–3 implementation status
+
+- Added Supabase Auth client/session handling, callback and password-reset
+  flows, role-aware route guards, profile and role onboarding screens, and
+  donor onboarding. The PDF uses six-digit email codes; implementation uses
+  Supabase confirmation links/PKCE, a documented deviation awaiting product
+  and email-configuration confirmation.
+- Added donor dashboard, create/edit/list/detail donation screens, pickup
+  request review/detail, donor handover, and impact reporting. Role navigation
+  outside the donor scope remains routed to phase placeholders.
+- Added typed Supabase data access and two dependent SQL migration drafts for
+  profiles/onboarding and donor workflow. They have not been applied,
+  PostgreSQL-validated, or tested against a live Supabase project. Local
+  environment values and MCP metadata are not evidence of live app
+  connectivity.
+- Whole-donation requests were explicitly selected: partial requests are not
+  supported. NGO receipt is only a database integration boundary; no NGO UI or
+  volunteer delivery flow is in this phase.
+- Impact includes only recipient-confirmed completed records; explicit
+  `servings` are counted as meals and `kg` as weight. `portions` and `items`
+  are not converted. People-fed and CO₂ metrics remain unavailable without
+  verified inputs and an approved factor. Notifications are not implemented.
+- Original standalone food artwork was not available; the donor dashboard's
+  food-rescue banner uses a documented icon/gradient approximation rather
+  than claiming an exact match.
+- `npm run typecheck`, `npm run build`, and `npm test -- --reporter=verbose`
+  passed; Vitest reports 4 files and 14 tests passed. Vite reports a 573 kB
+  minified JavaScript chunk-size advisory. Browser smoke checks confirmed the
+  sign-in and sign-up pages render and an unauthenticated `/donor` visit
+  redirects to sign-in. These checks do not prove live Supabase behavior.
+- Database/RLS/Storage tests and authenticated donor browser workflows remain
+  blocked on an authorized development project. Visual comparison against
+  donor pages 6–12 remains incomplete because protected donor routes cannot be
+  viewed without a verified backend session.
+- **Phase 2–3 status:** frontend implementation and draft schema are present;
+  backend integration, migration validation/application, visual review of all
+  donor pages, and live authenticated workflows remain incomplete. Do not
+  advance to Phase 4 without an explicit request.
 
 Acceptance criteria below are intended gates, not claims that the phases are
 already complete.

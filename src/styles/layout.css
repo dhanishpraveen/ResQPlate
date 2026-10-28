@@ -156,6 +156,8 @@
 
 .layout-notification-button {
   position: relative;
+  display: inline-grid;
+  place-items: center;
   width: 2.375rem;
   height: 2.375rem;
   border: 0;
@@ -239,7 +241,15 @@
   text-align: left;
 }
 
-.layout-profile-menu > button:hover {
+.layout-profile-menu > a {
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+
+.layout-profile-menu > button:hover,
+.layout-profile-menu > a:hover {
   background: var(--color-brand-50);
   color: var(--color-brand-900);
 }

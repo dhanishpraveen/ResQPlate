@@ -7,8 +7,9 @@ and visually inspected all 53 pages in sequence. The PDF contains image-based
 UI designs: text extraction returned no page text, so titles below are
 transcribed from the rendered visuals. Small supporting copy, some values, and
 fine icon details are not always legible at the supplied resolution; those
-items are described rather than guessed. The page labels and role assignments
-below follow the designs, correcting the provisional list where necessary.
+items are described rather than guessed. The page labels and role assignments below follow the designs. A prior
+inventory pass misnumbered the pages beginning with NGO registration; the
+sequence below is corrected against the rendered PDF.
 
 This is a screen inventory, not evidence that any screen has been implemented.
 The layouts shown are desktop designs; the PDF does not establish responsive
@@ -39,7 +40,10 @@ uncertainty.
 3. **“Verify Your Email” — Shared verification.** Green brand/phone-mail
    illustration beside an email verification form with six code boxes,
    Verify, resend-code countdown/action, and back-to-sign-in link. Reuses the
-   split auth layout. Code format and expiry details are too small to establish.
+   split auth layout. The visual specifies a code-entry experience, not a
+   confirmation link; implementing Supabase confirmation-link/PKCE handling
+   instead is a documented behavior deviation until the project email settings
+   and product requirements are confirmed.
 4. **“Complete Your Profile” — Shared profile onboarding.** Split brand panel
    with volunteer illustration and a right-side progress stepper and
    “Your Details” form. Visible areas include avatar upload, name/email/phone
@@ -122,111 +126,105 @@ uncertainty.
     question, Cancel, and Log Out. This is a dialog state, not a standalone
     dashboard page; confirm closes session and cancel returns to the current
     screen. Dialog and backdrop are reusable. Only donor context is pictured.
-18. **“NGO Sign Up” — NGO registration entry.** Split layout with green NGO
-    food-rescue promotional panel, checklist/meal illustration and
-    three-step progress indicator. Right-side Organization Details form
-    begins NGO registration with organization identity/registration type,
-    address, mission, and Next. Continues to page 19. Exact legal requirements
-    and verification policy are not specified by visual copy.
-
 ### NGO journey
 
-19. **“NGO Sign Up” — NGO registration, Organization Details step.** Repeats
-    the NGO promotional split panel. Stepper highlights Organization Details;
+18. **“NGO Sign Up” — NGO registration, Organization Details step.** The
+    NGO promotional split panel has a three-step progress indicator.
+    Organization Details is active;
     form collects organization identity/type, registration number, address,
     and organization description. Next advances to Contact Person Details
-    (page 20). Field-level validation is not shown.
-20. **“NGO Sign Up” — NGO registration, Contact Person Details step.** Same
+    (page 19). Field-level validation is not shown.
+19. **“NGO Sign Up” — NGO registration, Contact Person Details step.** Same
     split panel and three-step stepper, with Contact Person Details active.
     Form captures contact person's name, email, role/designation, phone, and
     related contact details. Back returns to organization details; Next
-    advances to verification (page 21). Personal-data visibility must be
+    advances to verification (page 20). Personal-data visibility must be
     limited.
-21. **“NGO Sign Up” — NGO registration, Organization Verification step.**
+20. **“NGO Sign Up” — NGO registration, Organization Verification step.**
     Same registration frame with final step active. Form requests organization
     verification documents (including registration/tax-related evidence in
     visible labels) with upload controls, Back, and Submit for Verification.
-    Leads to page 22. Document types and accepted formats are small/partly
+    Leads to page 21. Document types and accepted formats are small/partly
     unreadable and require confirmation; uploaded records must remain private.
-22. **“Verification Pending” — NGO.** Standalone, pale-green success/pending
+21. **“Verification Pending” — NGO.** Standalone, pale-green success/pending
     composition with verification-document icon, explanatory pending message,
     checklist/status rows, Go to Dashboard, and Explore the Platform. The
     buttons route into the NGO app; this is a status/confirmation state.
     Review timing and whether exploration is permitted pre-verification need
     policy decisions.
-23. **“NGO Dashboard” — NGO.** Role-specific desktop app shell and top-right
+22. **“NGO Dashboard” — NGO.** Role-specific desktop app shell and top-right
     alerts/profile controls. Summary metrics across rescued food, requests,
     deliveries, and impact; new/nearby donations with food photos, a map-style
     nearby-donation panel, My Requests, and Your Impact cards. Sidebar:
     Dashboard, Available Donations, My Requests, My Deliveries, Impact,
     Messages, Notifications, Profile, Settings, Logout. Map data and metric
     definitions are not established by the mock.
-24. **“Available Donations” — NGO.** App shell with search/filter controls
+23. **“Available Donations” — NGO.** App shell with search/filter controls
     and donation rows containing food photos, donor identity, food details,
     availability/status, View Details, and Request Pickup. Search and filters
-    narrow the list; row actions lead to pages 25–26. Reuses donor food cards
+    narrow the list; row actions lead to pages 24–25. Reuses donor food cards
     and status tags. Eligibility and geographic filtering are not specified.
-25. **“Donation Details” — NGO.** Detail screen with food photograph, donor
+24. **“Donation Details” — NGO.** Detail screen with food photograph, donor
     name, food type/quantity/availability summaries, pickup details, donor
     information, and handling notes; Request Pickup and Back actions. Request
-    Pickup leads to page 26; donor contact/privacy and address disclosure
+    Pickup leads to page 25; donor contact/privacy and address disclosure
     timing are unresolved.
-26. **“Request Pickup” — NGO.** Request form with selected donation summary,
+25. **“Request Pickup” — NGO.** Request form with selected donation summary,
     requested quantity, preferred pickup date/time, and optional additional
     notes beside a request summary card; Submit Pickup Request and Back.
-    Submission leads to page 27. Quantity constraints, time-slot conflicts,
+    Submission leads to page 26. Quantity constraints, time-slot conflicts,
     and multi-request rules need implementation decisions.
-27. **“Pickup Request Submitted!” — NGO success state.** Green confirmation
+26. **“Pickup Request Submitted!” — NGO success state.** Green confirmation
     check, submission explanation, request/food summary and pending status,
-    with View My Requests and Go to Dashboard. These actions lead to page 28
+    with View My Requests and Go to Dashboard. These actions lead to page 27
     or the NGO dashboard. Reuses confirmation icon, pale-green cards, and
     primary/secondary action buttons.
-28. **“My Requests” — NGO.** App shell with search and status tabs (including
+27. **“My Requests” — NGO.** App shell with search and status tabs (including
     pending/approved/declined/completed states) and donation request rows.
     Rows show food/donor, quantity/time and status, with View Details
     navigation. Reuses request cards/status pills. Exact status vocabulary and
     cancellation behavior need confirmation.
-29. **“My Deliveries” — NGO.** App shell with delivery-status filters and rows
+28. **“My Deliveries” — NGO.** App shell with delivery-status filters and rows
     showing delivery/task reference, food/donor, volunteer, time, progress
-    status, and detail affordance. Rows lead to page 30. Reuses delivery
+    status, and detail affordance. Rows lead to page 29. Reuses delivery
     status chips and participant summaries. The design suggests role-specific
     delivery tracking but does not define assignment policy.
-30. **“Delivery Details” — NGO.** Delivery overview with request reference,
+29. **“Delivery Details” — NGO.** Delivery overview with request reference,
     donation/food summary, volunteer details/contact actions, delivery timeline
     (approved, assigned, collected, in transit, delivered/receipt), pickup and
     drop-off information, plus a receipt action. Leads to receipt confirmation
-    (page 31) when appropriate. Participant contact and location data need
+    (page 30) when appropriate. Participant contact and location data need
     least-privilege handling.
-31. **“Confirm Food Receipt” — NGO.** Receipt form with delivery summary,
+30. **“Confirm Food Receipt” — NGO.** Receipt form with delivery summary,
     food quantity/quality check, optional notes and photo upload, pickup and
     delivery context, volunteer details, and Confirm Receipt. Confirmation
-    leads to page 32. Exact quality criteria, partial receipt, and evidence
+    leads to page 31. Exact quality criteria, partial receipt, and evidence
     requirements are unresolved.
-32. **“Receipt Confirmed!” — NGO success state.** Checkmark, completed
+31. **“Receipt Confirmed!” — NGO success state.** Checkmark, completed
     donation/delivery summary, food condition and receipt details, thank-you
     note, View Delivery Details, and Back to My Deliveries. Actions return to
-    page 30 or 29. Reuses delivery completion confirmation pattern.
-33. **“NGO Impact Dashboard” — NGO.** App shell with period selector, metrics
+    pages 29 and 28. Reuses delivery completion confirmation pattern.
+32. **“NGO Impact Dashboard” — NGO.** App shell with period selector, metrics
     for food received/people served/donations or deliveries, trend chart,
     category/cuisine breakdown, recent pickups, and organization impact
     overview. Charts and summary cards parallel donor reporting, with
     role-specific measures. Sample metrics are illustrative only.
-34. **“Messages” — NGO.** Same three-column conversation list, selected
+33. **“Messages” — NGO.** Same three-column conversation list, selected
     conversation and composer pattern as page 13, with donor/volunteer
     participants and delivery context. Messages may relate to pickup and
     delivery coordination. Exact common component boundaries and participant
     permissions must be established.
-35. **“Notifications” — NGO.** App-shell, filterable notification list with
+34. **“Notifications” — NGO.** App-shell, filterable notification list with
     mark-all-as-read and event rows for request approval/decline, pickup
     scheduling/completion, new message, and account updates. Rows navigate to
     relevant requests/deliveries. Reuses page 14 pattern with NGO-specific
     event types.
-36. **“Organization Profile” — NGO.** App shell with tabs for Organization
+35. **“Organization Profile” — NGO.** App shell with tabs for Organization
     Details, Documents, and Verification. Displays identity/contact details,
     verification status and uploaded-document rows, with Edit Profile.
     Reuses profile and status cards. Verification evidence must not be exposed
     via public URLs; approved edit/review authority is not depicted.
-37. **“Settings” — NGO.** App shell with Notification Preferences, Security,
+36. **“Settings” — NGO.** App shell with Notification Preferences, Security,
     Privacy, and Account Management sections. Toggles cover request/pickup,
     message or delivery events; account actions include profile/deactivation
     options. Reuses donor settings layout but shows NGO-related event types.
@@ -234,102 +232,104 @@ uncertainty.
 
 ### Volunteer journey
 
-38. **“Volunteer Sign Up” — Volunteer.** Split composition with dark-green
+37. **“Volunteer Sign Up” — Volunteer.** Split composition with dark-green
     volunteer/food-handoff illustration panel and form for name, email,
     phone, password and password confirmation; Sign Up or Continue and a
     sign-in link. Leads into volunteer onboarding. The visual does not show
     identity checks or detailed availability setup.
-39. **“Volunteer Dashboard” — Volunteer.** App shell with volunteer-specific
+38. **“Volunteer Dashboard” — Volunteer.** App shell with volunteer-specific
     sidebar, profile and notification controls, summary cards for completed
     deliveries/tasks/availability or earnings, ongoing tasks, quick actions,
     today's schedule, and an illustrated “Deliver Food, Spread Hope” panel.
     Sidebar includes Dashboard, Available Tasks, My Tasks, Earnings, Impact,
     Messages, Notifications, Profile, Availability, Settings, Logout. Sample
     values are not operational requirements.
-40. **“Available Delivery Tasks” — Volunteer.** App shell with search/filter
+39. **“Available Delivery Tasks” — Volunteer.** App shell with search/filter
     controls, task list rows displaying donor-to-NGO route, distance/food
     details, schedule and availability, plus Accept Task. Pagination is
-    visible. Accept leads to page 42. Eligibility, task reservation, and
+    visible. Accept leads to page 41. Eligibility, task reservation, and
     simultaneous acceptance rules are not defined.
-41. **“Delivery Task Details” — Volunteer.** Selected task summary, pickup
+40. **“Delivery Task Details” — Volunteer.** Selected task summary, pickup
     and delivery route/times, route map/steps, instructions, contact-person
     actions, food-handling details and Accept Task. Back returns to available
-    tasks; acceptance leads to page 42. Location disclosure and contact
+    tasks; acceptance leads to page 41. Location disclosure and contact
     permissions should be restricted to assigned volunteers.
-42. **“Task Accepted!” — Volunteer success state.** Checkmark confirmation,
+41. **“Task Accepted!” — Volunteer success state.** Checkmark confirmation,
     task and route summary, next-step callout to collect from donor by a
-    displayed time, View My Tasks, and Navigate to Pickup. Leads to page 43
-    or page 44. Reuses success panel and task summary; route/navigation
+    displayed time, View My Tasks, and Navigate to Pickup. Leads to page 42
+    or page 43. Reuses success panel and task summary; route/navigation
     provider is not established.
-43. **“My Tasks” — Volunteer.** App shell with active/completed tabs and
+42. **“My Tasks” — Volunteer.** App shell with active/completed tabs and
     delivery-task cards. Active cards show workflow progress from accepted
     through pickup/delivery/receipt and actions such as pickup navigation;
     past tasks show completion and View Details. Reuses timeline/status
     elements from NGO delivery views. Exact task retention and cancellation
     rules are not shown.
-44. **“TASK-2184 – Collect from Donor” — Volunteer task step.** Task-specific
+43. **“TASK-2184 – Collect from Donor” — Volunteer task step.** Task-specific
     header and donor/pickup details with navigation/contact actions; progress
     stepper; food quantity/handling details; “Collected Food” confirmation
     checkbox and photo upload; Update Later and Confirm Pickup. Confirmation
-    leads to page 45. Evidence and failed/partial pickup handling need
+    leads to page 44. Evidence and failed/partial pickup handling need
     definition.
-45. **“Pickup Confirmed!” — Volunteer success state.** Checkmark, task/food
+44. **“Pickup Confirmed!” — Volunteer success state.** Checkmark, task/food
     quantity and donor-to-NGO summary, next step to deliver to NGO, route
-    distance/time, View Task Details, and Navigate to NGO. Leads to page 46.
+    distance/time, View Task Details, and Navigate to NGO. Leads to page 45.
     Reuses confirmation summary and green next-step panel.
-46. **“TASK-2184 – Deliver to NGO” — Volunteer task step.** Task-specific
+45. **“TASK-2184 – Deliver to NGO” — Volunteer task step.** Task-specific
     NGO/drop-off details and navigation/contact actions; progress stepper;
     food/quantity and handling information; handover details/photo upload;
-    Update Later and Confirm Delivery. Confirmation leads to page 47.
+    Update Later and Confirm Delivery. Confirmation leads to page 46.
     Recipient handoff evidence and disputes are unresolved.
-47. **“Delivery Completed!” — Volunteer success state.** Checkmark and task
+46. **“Delivery Completed!” — Volunteer success state.** Checkmark and task
     summary with handover recorded, message that NGO confirmation completes
-    the flow, View My Tasks and View Task Details. Returns to page 43 or
+    the flow, View My Tasks and View Task Details. Returns to page 42 or
     task details. This explicitly distinguishes volunteer delivery completion
-    from NGO receipt confirmation (page 31).
-48. **“My Earnings” — Volunteer.** App shell with summary cards for total
+    from NGO receipt confirmation (page 30).
+47. **“My Earnings” — Volunteer.** App shell with summary cards for total
     earnings, deliveries, pending reimbursements and paid/available balance,
     history period filter and transaction table with date/task/source/type,
     amount/status. Financial semantics and whether values are payments or
     reimbursements are not established by the design.
-49. **“My Impact” — Volunteer.** App shell with delivery/food/people metrics,
+48. **“My Impact” — Volunteer.** App shell with delivery/food/people metrics,
     delivery activity bar chart and impact overview checklist/cards. Shared
     reporting visual language with role-specific measures. All displayed
     totals are sample values pending metric definitions.
-50. **“Messages” — Volunteer.** Three-column app-shell messaging layout with
+49. **“Messages” — Volunteer.** Three-column app-shell messaging layout with
     participant/conversation filters, selected chat, task-specific message
     history, food/task context and composer. Reuses the message pattern from
     donor/NGO pages but includes volunteer task coordination. Participant
     authorization and message retention are not defined.
-51. **“Notifications” — Volunteer.** Filterable app-shell notification list
+50. **“Notifications” — Volunteer.** Filterable app-shell notification list
     with mark-all-as-read and volunteer events such as new task availability,
     pickup reminder, handover/confirmation, schedule, and account update.
     Notification rows link to relevant task/profile screens. Reuses the
     shared notification pattern; channel and preference rules remain open.
+51. **“My Profile” — Volunteer.** App shell with a profile summary and tabs
+    for Personal Details, Service Area, Transportation, and Documents. The
+    page shows editable contact details, volunteer status, delivery/food
+    summary, and Save Changes/Discard Changes controls. The sidebar's Profile
+    item is active; document and personal data require least-privilege access.
 52. **“Settings” — Volunteer.** App shell with General, Notifications,
     Security, Privacy, and Account categories. The visible General panel
     includes language, theme, distance-unit preferences, and toggles for task
     assignments, pickup/delivery reminders, messages, and earnings or
     reimbursement updates, with Discard Changes and Save Changes. Reuses the
-    shared settings shell but has volunteer-specific preferences. The PDF
-    includes a Profile navigation item but does not show a dedicated volunteer
-    profile screen in its final-page sequence.
+    shared settings shell but has volunteer-specific preferences.
 53. **“My Availability” — Volunteer (separate screen from Settings).** App
     shell with availability on/off switch and quick summary (days, time slots,
     service region/radius); tabs for Schedule, Service Area, and Preferences;
     selected weekday controls, editable time-slot rows, Add Time Slot,
     Discard Changes, and Save Availability. Sidebar highlights Availability;
-    Settings is a separate navigation item. This corrects the provisional
-    page-53 label: availability is its own page, not Settings.
+    Settings is a separate navigation item.
 
 ## Shared design and navigation patterns
 
-- **Authentication/onboarding:** pages 1–5 and 18–22 use a branded
+- **Authentication/onboarding:** pages 1–5 and 18–20 use a branded
   split-panel pattern. The left brand panel contains ResQPlate identity,
   green food-rescue illustration/photography, short mission copy and
   decorative leaf/fruit forms; the right panel contains a white form card or
-  progress workflow. Page 22 is a standalone pending state.
-- **Dashboard shell:** pages 6–17, 23–37, and 39–53 use a dark-green,
+  progress workflow. Page 21 is the standalone verification-pending state.
+- **Dashboard shell:** pages 6–17, 22–36, and 38–53 use a dark-green,
   icon-and-label left rail, white/light content canvas, top-right notification
   and profile controls, and compact rounded cards. Sidebar item names and
   ordering differ by role; do not merge access boundaries just because the
@@ -340,27 +340,25 @@ uncertainty.
   Deliveries, Impact, Messages, Notifications, Profile, Settings, Logout.
 - **Volunteer navigation:** Dashboard, Available Tasks, My Tasks, Earnings,
   Impact, Messages, Notifications, Profile, Availability, Settings, Logout.
-- **Messages:** pages 13, 34, 50 share a three-column conversation list/chat/
+- **Messages:** pages 13, 33, 49 share a three-column conversation list/chat/
   composer layout; task or donation context and participants differ.
-- **Notifications:** pages 14, 35, 51 share filterable event rows and unread
+- **Notifications:** pages 14, 34, 50 share filterable event rows and unread
   styling; available event categories and routes are role-specific.
-- **Profiles/settings:** pages 15–16 and 36–37 show donor/NGO profile and
-  settings variants. Volunteer page 52 is Settings and page 53 is My
-  Availability; although the sidebar offers Profile, a dedicated volunteer
-  profile design is not present in the 53-page sequence.
+- **Profiles/settings:** pages 15–16 and 35–36 show donor/NGO profile and
+  settings variants. Volunteer page 51 is My Profile, page 52 is Settings,
+  and page 53 is My Availability.
 - **Donation-to-delivery flow:** donor listing (7–8) → NGO browse/details
-  (24–25) → request (26–27) → donor review/handover (9–10) → volunteer task
-  availability/acceptance (40–42) → collection (44–45) → delivery
-  (46–47) → NGO delivery tracking and receipt (29–32). Messages/notifications
+  (23–24) → request (25–26) → donor review/handover (9–10) → volunteer task
+  availability/acceptance (39–41) → collection (43–44) → delivery
+  (45–46) → NGO delivery tracking and receipt (28–31). Messages/notifications
   can support these transitions. The mockups do not resolve request conflicts,
   assignment authority, status transition rules, or partial/failure cases.
 - **Potential ambiguity:** donor pages 11–12 both show “Your Impact” but have
   different report compositions; determine whether one is a detail/tab state.
   NGO registration appears as an entry on page 18 and continues in the
   multi-step forms on 19–21. Volunteer delivery completion (47) is not the
-  same as NGO receipt confirmation (31–32). The provisional page-52 profile
-  label was incorrect: the actual page is Settings; My Availability is the
-  separate page 53.
+  same as NGO receipt confirmation (30–31). This inventory now includes the
+  previously omitted volunteer profile design on page 51.
 
 ## Visual system inventory
 

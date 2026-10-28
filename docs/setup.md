@@ -53,19 +53,26 @@ production `.env` file with guessed values.
 4. Configure authentication providers, redirect URLs, and email behavior in
    Supabase only after product requirements and account permissions are
    confirmed.
-5. Design and review schema and RLS policies before applying migrations.
+5. Review the versioned migrations and verify their assumptions against the
+   intended development project before applying them.
 
-No project creation, authentication configuration, database schema, seed data,
-or backend connection was performed in this foundation phase.
+No project was created; Supabase account/auth settings were not changed; no
+schema was applied; and no seed data or live backend connection was verified.
+The authentication and donor migrations currently in `supabase/migrations/`
+are drafts only; they have not been applied or validated against a live
+database.
 
 ## Future migration workflow
 
 Database migrations belong under `supabase/migrations/` and must be
 version-controlled, reviewed, and tested against a development environment
-before any approved deployment. No migration or seed file is present yet.
-Use the Supabase CLI and the project's documented workflow when introduced;
-do not apply ad-hoc or destructive SQL to a shared/production project. Before
-write operations, review the migration and obtain any required approval.
+before any approved deployment. The current drafts are
+`20261028000000_auth_profiles_onboarding.sql` and
+`20261029000000_donor_module.sql`; neither has been applied or exercised in
+PostgreSQL. There is no seed data. Use the Supabase CLI and the project's
+approved workflow when a development target is available; do not apply
+unreviewed or destructive SQL to a shared/production project. Before write
+operations, confirm the target and obtain required approval.
 
 ## Supabase MCP setup in VS Code
 
@@ -116,11 +123,13 @@ Commands currently defined in `package.json`:
 ```powershell
 npm run typecheck
 npm run build
+npm test
 ```
 
 `npm run dev` starts the local server; `npm run preview` previews an existing
-production build. No lint or test command exists yet. Do not report lint or
-test success until those tools and tests are added and actually run.
+production build. No lint command is configured. Tests currently cover
+selected auth route/validation and donor metric/input-validation logic; they
+do not verify PostgreSQL policies or authenticated Supabase workflows.
 
 ## Troubleshooting
 
