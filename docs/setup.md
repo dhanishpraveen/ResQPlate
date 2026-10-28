@@ -81,40 +81,44 @@ server and the official Supabase MCP endpoint. The installed VS Code CLI was
 1.142.0. VS Code's current documentation says `.vscode/mcp.json` remains
 available for compatibility, though the guided flow labels this destination
 deprecated; it was retained here because it is the requested workspace path.
-Replace `YOUR_SUPABASE_PROJECT_REF` with the approved **development**
-project's reference. The endpoint is scoped to that project and requests
-read-only access. No feature-selection parameter is set because a supported
-parameter/value was not confirmed in the official configuration guidance. The
-file contains no token or service-role key.
+The configured project reference matches the local application configuration,
+but the project has not been independently confirmed as a development
+environment. The endpoint includes the supplied feature selection and
+omits `read_only=true` to request the normal tool set. JSON and query
+parameters were parsed locally; this does not verify OAuth, connectivity, or
+write-capable tools. No token or service-role key is stored in the file.
 
 See the [VS Code MCP server documentation](https://code.visualstudio.com/docs/agent-customization/mcp-servers)
 and [Supabase MCP documentation](https://supabase.com/docs/guides/getting-started/mcp)
 for current configuration and authentication details.
 
 1. Open the repository in a VS Code version that supports HTTP MCP servers.
-2. Replace the project-reference placeholder with the real development
-   reference; do not commit credentials.
+2. Confirm in Supabase Dashboard that the configured project reference is the
+   intended development project before any database write.
 3. Start/enable the server using VS Code's MCP controls.
 4. Complete the authentication prompt in the trusted VS Code/Supabase flow.
    Do not paste credentials into source files or chat.
-5. Verify the server reports connected in the VS Code MCP controls, then run
-   a harmless read-only tool such as listing project metadata or reading
-   documentation. Confirm it targets the intended development project.
+5. Verify the server reports connected in the VS Code MCP controls. Before
+   any schema changes, run read-only project/schema inspection and confirm the
+   connected project is the intended development project. Confirm the
+   available tools actually support the required write operations before
+   claiming write access.
 
 The configuration file alone does not prove that the server connected or is
 authenticated. No account login or MCP connection was available to verify
-during foundation setup.
+during the latest diagnostic attempt. See
+[`database-diagnostics.md`](./database-diagnostics.md) for the actual
+configuration and connection findings.
 
-### Enabling approved writes later
+### Controlled database changes
 
-Keep the initial configuration read-only. When database migrations need to be
-applied, first review and approve the migration and confirm the target is the
-development project. Then consult the current official Supabase MCP
-documentation and change the configuration to the documented write-enabled
-mode only for that approved operation. Do not remove read-only restrictions
-for convenience, and do not grant production access without explicit
-authorization. Restore the safer configuration after the task if writes are
-not continuously required. Never embed credentials in the MCP JSON.
+The workspace endpoint is configured without `read_only=true`, but this
+configuration alone does not prove that OAuth succeeded or that write tools
+are available. For each schema change, review a version-controlled migration,
+confirm the connected target is the intended development project, and inspect
+the current schema and migration history first. Explain destructive impact
+and obtain explicit confirmation before destructive operations. Never embed
+credentials in the MCP JSON.
 
 ## Available checks
 

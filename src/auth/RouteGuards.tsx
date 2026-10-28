@@ -48,9 +48,11 @@ export function RequireAccount({ role }: { role?: UserRole }) {
   if (!profile?.role) {
     return path === "/onboarding/role" ? <Outlet /> : <Navigate replace to="/onboarding/role" />;
   }
+  if (!profile.profile_completed) {
+    return path === "/onboarding/profile" ? <Outlet /> : <Navigate replace to="/onboarding/profile" />;
+  }
   if (path === "/onboarding/role") return <Navigate replace to={nextOnboardingPath(profile.role)} />;
-  if (!profile.profile_completed && path !== "/onboarding/profile") return <Navigate replace to="/onboarding/profile" />;
-  if (profile.profile_completed && path === "/onboarding/profile") {
+  if (path === "/onboarding/profile") {
     return <Navigate replace to={nextOnboardingPath(profile.role)} />;
   }
 

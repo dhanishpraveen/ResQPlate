@@ -42,13 +42,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
   const loadSequence = useRef(0);
+  const profileUserId = useRef<string | null>(null);
 
   const loadProfile = useCallback(async (userId: string) => {
     const sequence = ++loadSequence.current;
     setProfileError(null);
-    setProfile(null);
-    setRoleOnboardingComplete(null);
-    setNgoVerificationStatus(null);
+    if (profileUserId.current !== userId) {
+      profileUserId.current = null;
+      setProfile(null);
+      setRoleOnboardingComplete(null);
+      setNgoVerificationStatus(null);
+    }
 
     if (!supabase) {
       setProfileError("Supabase is not configured.");
@@ -100,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (sequence !== loadSequence.current) return;
+      profileUserId.current = userId;
       setProfile(userProfile);
       setRoleOnboardingComplete(onboardingComplete);
       setNgoVerificationStatus(verificationStatus);
@@ -128,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(Boolean(nextSession));
       if (!nextSession) {
         loadSequence.current += 1;
+        profileUserId.current = null;
         setProfile(null);
         setRoleOnboardingComplete(null);
         setNgoVerificationStatus(null);

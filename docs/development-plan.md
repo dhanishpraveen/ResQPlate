@@ -18,10 +18,98 @@ pages were rendered and visually reviewed. The reference does not identify an
 original font or provide separate source assets; these limitations and design
 ambiguities are recorded in `docs/design/design-inventory.md`.
 
-No live Supabase application connection or database access was verified.
-Authentication and donor workflows have since been implemented in the
-frontend, and two version-controlled migration drafts have been added. They
-remain unapplied and unverified against PostgreSQL; no seed data exists.
+The initial Supabase production schema setup has since been applied and
+verified; see the milestone below and
+[`database-diagnostics.md`](./database-diagnostics.md) for results. The
+frontend authentication and donor workflows are implemented. The profile
+backfill migration was added and applied without assigning a role to the
+existing account.
+
+### Phase 2A.1 database diagnostics
+
+- Updated the workspace VS Code MCP endpoint to use the locally configured
+  project reference, the supplied feature selection, and `read_only=true`.
+  JSON and query-string parsing passed locally; this is not evidence of
+  OAuth, live database access, or development-environment identity.
+- The installed Copilot CLI has a separate user-level `supabase` server
+  configured for a different project reference without the read-only
+  parameter. It was not changed because that global entry may serve other
+  workspaces.
+- The attempted repository-scoped CLI entry was not recognized by the
+  installed CLI's `mcp list`/`mcp get` commands and was not retained.
+- No authenticated MCP operation was available. Live schema, RLS, grants,
+  API exposure, and hosted migration history remain unverified. No hosted
+  writes or schema-cache refreshes occurred. The `user_profiles` 404 remains
+  unresolved because the actual response body was unavailable.
+- **Phase 2A.1 status:** workspace configuration corrected; read-only
+  diagnostics blocked on selecting/authenticating the appropriate MCP
+  configuration and confirming the Dashboard project identity. See
+  [`database-diagnostics.md`](./database-diagnostics.md).
+
+### Phase 2A.2 Supabase MCP write-capable configuration
+
+- Updated `.vscode/mcp.json` to omit `read_only=true`, preserving the
+  configured project reference and feature list. JSON and URL parameters
+  parse successfully.
+- Inspected `.env`, `.env.example`, Supabase client initialization, both
+  migration drafts, and the existing diagnostics. Secret values were not
+  printed.
+- Authenticated read-only MCP checks confirmed project `ResQPlate`
+  (`ohfooorhpbciphscxteb`), identified by the user as production. The live
+  `public` schema has zero base tables, the MCP migration list is empty, the
+  migration-history table is absent, and one auth user exists.
+- The authentication/profile migration creates profile records only for
+  future auth inserts; it does not backfill that existing account. Therefore
+  the two migrations as written would leave the existing account without its
+  profile row. This is a stop condition. No migrations or other hosted writes
+  were applied.
+- Static review found no `DROP`, `TRUNCATE`, `DELETE`, or destructive table
+  alterations. The bucket upserts can update existing bucket configuration,
+  but the four target bucket IDs were absent in preflight. Migrations contain
+  non-idempotent DDL and must not be blindly rerun.
+- **Status at that time:** migration application was blocked pending a safe
+  existing-account plan. This status was superseded by the production setup
+  milestone below; the original `user_profiles` response body remains
+  unavailable.
+
+### Production profile backfill proposal
+
+- Read-only inspection found one existing Auth account; email confirmation is
+  complete, and user metadata contains `role=donor`. The UUID and personal
+  fields were not recorded. Because Auth metadata is user-supplied, it is not
+  treated as confirmed authorization or used to assign a role.
+- Added `supabase/migrations/20261029000001_backfill_existing_auth_profiles.sql`
+  as a proposed third migration (after auth/profile and donor migrations). It
+  inserts `id` only for existing `auth.users` records and uses
+  `ON CONFLICT (id) DO NOTHING`; the nullable role remains unset until the
+  signed-in account holder chooses through onboarding and the
+  `assign_initial_role` function. RLS and role protections are unchanged.
+- This was a local proposal at that stage; it was later applied with explicit
+  user authorization as recorded below.
+
+### Initial production schema setup
+
+- Applied `20261028000000_auth_profiles_onboarding`,
+  `20261029000001_backfill_existing_auth_profiles`, and
+  `20261029000000_donor_module` in that order using the Supabase MCP
+  migration tool. Each call returned success; no migration was retried.
+- Supabase migration history records versions `20261028191501`,
+  `20261028191517`, and `20261028191623` for those migrations respectively.
+- Read-only verification found all nine expected public tables with RLS
+  enabled; 53 constraints, 19 indexes, 19 public policies, 18 functions, 12
+  triggers, two views, four private storage buckets, and 12 storage policies.
+  The table listing confirmed expected columns, primary keys, and foreign
+  keys.
+- The existing Auth account was not modified. The backfill produced one
+  profile row with a null role; no role or user-provided metadata was used to
+  assign it. Authenticated users cannot directly update role or profile
+  completion fields, and anonymous users have no select grant on profiles.
+- The pre-migration absence of `public.user_profiles` supports the original
+  404's missing-table cause. The actual authenticated frontend request was
+  not replayed; confirm it through the existing account without exposing
+  tokens.
+- No destructive statements were found in the SQL; DDL is non-idempotent and
+  must not be rerun. No Auth user was created, deleted, or updated.
 
 Phase 1 establishes a centralized token layer, responsive shared app/auth
 shells, role-specific navigation configurations, accessible UI primitives,

@@ -1,15 +1,18 @@
-import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import type { Database } from "../lib/database.types";
-import { RequireAccount } from "./RouteGuards";
+import { HomeRoute, RequireAccount } from "./RouteGuards";
+import { ChooseRolePage } from "./pages";
 import { useAuth } from "./AuthContext";
 
 vi.mock("./AuthContext", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./AuthContext")>();
   return { ...actual, useAuth: vi.fn() };
 });
+
+afterEach(cleanup);
 
 const session = {
   access_token: "unit-test-token",
@@ -41,6 +44,25 @@ function renderProtected(role: "donor" | "ngo" | "volunteer", initialPath = "/pr
         <Route element={<p>Donor destination</p>} path="/donor" />
         <Route element={<RequireAccount role={role} />}>
           <Route element={<p>Protected content</p>} path="/protected" />
+        </Route>
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+function renderOnboarding(initialPath = "/") {
+  return render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <Routes>
+        <Route element={<HomeRoute />} path="/" />
+        <Route element={<p>Sign-in page</p>} path="/sign-in" />
+        <Route element={<RequireAccount />}>
+          <Route element={<ChooseRolePage />} path="/onboarding/role" />
+          <Route element={<p>Profile onboarding</p>} path="/onboarding/profile" />
+          <Route element={<RequireAccount role="donor" />}>
+            <Route element={<p>Donor onboarding</p>} path="/onboarding/donor" />
+            <Route element={<p>Donor dashboard</p>} path="/donor" />
+          </Route>
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -86,5 +108,41 @@ describe("role-aware route protection", () => {
     vi.mocked(useAuth).mockReturnValue(authState({ profile: { ...profile, role: "ngo" } }));
     renderProtected("ngo", "/protected");
     expect(await screen.findByText("Protected content")).toBeInTheDocument();
+  });
+
+  it("sends an authenticated null-role account to role selection without redirecting to a dashboard", async () => {
+    vi.mocked(useAuth).mockReturnValue(authState({
+      profile: { ...profile, role: null, profile_completed: false },
+      roleOnboardingComplete: null,
+    }));
+
+    renderOnboarding();
+
+    expect(await screen.findByRole("heading", { name: "Choose Your Role" })).toBeInTheDocument();
+    expect(screen.queryByText("Donor dashboard")).not.toBeInTheDocument();
+  });
+
+  it("keeps an incomplete donor profile in profile onboarding instead of looping through donor onboarding", async () => {
+    vi.mocked(useAuth).mockReturnValue(authState({
+      profile: { ...profile, profile_completed: false },
+      roleOnboardingComplete: false,
+    }));
+
+    renderOnboarding("/onboarding/profile");
+
+    expect(await screen.findByText("Profile onboarding")).toBeInTheDocument();
+    expect(screen.queryByText("Donor onboarding")).not.toBeInTheDocument();
+  });
+
+  it("routes an assigned but incomplete account directly from role selection to profile onboarding", async () => {
+    vi.mocked(useAuth).mockReturnValue(authState({
+      profile: { ...profile, profile_completed: false },
+      roleOnboardingComplete: false,
+    }));
+
+    renderOnboarding("/onboarding/role");
+
+    expect(await screen.findByText("Profile onboarding")).toBeInTheDocument();
+    expect(screen.queryByText("Donor dashboard")).not.toBeInTheDocument();
   });
 });
