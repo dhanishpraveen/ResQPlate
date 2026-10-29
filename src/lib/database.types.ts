@@ -201,6 +201,13 @@ export type Database = {
         Args: { p_donation_id: string; p_quantity: number };
         Returns: boolean;
       };
+      list_available_donations: {
+        Args: { p_donation_id?: string | null };
+        Returns: Array<Pick<
+          Donation,
+          "id" | "food_name" | "cuisine_type" | "description" | "quantity" | "unit" | "expires_at" | "status" | "created_at" | "photo_path"
+        >>;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

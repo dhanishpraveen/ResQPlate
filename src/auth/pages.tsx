@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, CheckCircle2, HeartHandshake, Leaf, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, HeartHandshake, Leaf } from "lucide-react";
 import { AuthLayout } from "../components/layout";
 import { Button, Checkbox, InlineAlert, LoadingState, SelectField, StatusBadge, TextField, TextareaField } from "../components/ui";
 import type { UserRole } from "../components/navigation";
 import { useAuth, roleHome } from "./AuthContext";
-import { callbackDestination, isE164Phone, validateNgoDocument, validateProfileImage } from "./validation";
+import { callbackDestination, getMissingNgoOrganizationDetails, getMissingNgoProfileDetails, isE164Phone, validateProfileImage } from "./validation";
 import { supabase, supabaseConfigurationError } from "../lib/supabase";
 
 type AuthLocationState = { from?: { pathname?: string } };
@@ -100,7 +100,7 @@ export function SignUpPage({ role: presetRole }: { role?: UserRole }) {
     setBusy(false);
     if (signUpError) { setError(signUpError.message); return; }
     if (data.session) {
-      navigate("/onboarding/profile", { replace: true });
+      navigate(role === "ngo" ? "/onboarding/ngo/organization" : "/onboarding/profile", { replace: true });
     } else {
       navigate(`/email-sent?email=${encodeURIComponent(email.trim())}`, { replace: true });
     }
@@ -191,7 +191,8 @@ export function AuthCallbackPage() {
       if (sessionError) { setError(sessionError.message); setBusy(false); return; }
       if (!data.session) { setError("The confirmation link is invalid, expired, or already used. Request a new one."); setBusy(false); return; }
       const next = search.get("next");
-      navigate(callbackDestination(next), { replace: true });
+      const role = data.session.user.user_metadata.role === "ngo" ? "ngo" : null;
+      navigate(callbackDestination(next, role), { replace: true });
     }
     void finish().catch((caught: unknown) => {
       if (active) {
@@ -290,7 +291,12 @@ export function ResetPasswordPage({ update = false }: { update?: boolean }) {
 export function ChooseRolePage() {
   const { session, profile, refreshProfile } = useAuth();
   const navigate = useNavigate();
-  const [role, setRole] = useState<UserRole>("donor");
+  const [role, setRole] = useState<UserRole>(() => {
+    const metadataRole = session?.user.user_metadata?.role;
+    return metadataRole === "ngo" || metadataRole === "volunteer" || metadataRole === "donor"
+      ? metadataRole
+      : "donor";
+  });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -300,7 +306,11 @@ export function ChooseRolePage() {
     setError(null);
     const { error: assignError } = await supabase.rpc("assign_initial_role", { p_role: role });
     if (assignError) { setError(assignError.message); setBusy(false); return; }
-    await refreshProfile();
+    if (!await refreshProfile()) {
+      setError("Your role was assigned, but your application profile could not be loaded. Refresh the page before continuing.");
+      setBusy(false);
+      return;
+    }
     setBusy(false);
     navigate("/onboarding/profile", { replace: true });
   }
@@ -386,7 +396,10 @@ export function ProfileOnboardingPage() {
     }).eq("id", session.user.id);
     setBusy(false);
     if (updateError) { setError(updateError.message); return; }
-    await refreshProfile();
+    if (!await refreshProfile()) {
+      setError("Your profile details were saved, but your application profile could not be reloaded. Refresh the page before continuing.");
+      return;
+    }
     navigate(role === "donor" ? "/onboarding/donor" : role === "ngo" ? "/onboarding/ngo/organization" : "/volunteer", { replace: true });
   }
 
@@ -471,7 +484,10 @@ export function DonorOnboardingPage() {
     }).eq("id", session.user.id);
     setBusy(false);
     if (saveError) { setError(saveError.message); return; }
-    await refreshProfile();
+    if (!await refreshProfile()) {
+      setError("Your donor details were saved, but your application profile could not be reloaded. Refresh the page before continuing.");
+      return;
+    }
     navigate("/donor", { replace: true });
   }
 
@@ -494,7 +510,7 @@ export function DonorOnboardingPage() {
   );
 }
 
-type NgoStep = "organization" | "contact" | "verification";
+type NgoStep = "organization" | "contact";
 type NgoDraft = {
   organization_name: string | null;
   organization_address: string | null;
@@ -505,28 +521,12 @@ type NgoDraft = {
   contact_designation: string | null;
   contact_email: string | null;
   contact_phone: string | null;
-  registration_certificate_path: string | null;
-  ngo_proof_path: string | null;
 };
 
-const ngoSteps: NgoStep[] = ["organization", "contact", "verification"];
+const ngoSteps: NgoStep[] = ["organization", "contact"];
 
 function isNgoStep(value: string | undefined): value is NgoStep {
-  return value === "organization" || value === "contact" || value === "verification";
-}
-
-async function uploadNgoDocument(userId: string, file: File) {
-  if (!supabase) throw new Error(supabaseConfigurationError ?? "Supabase is not configured.");
-  const validationError = validateNgoDocument(file);
-  if (validationError) throw new Error(validationError);
-  const extension = file.type === "application/pdf" ? "pdf" : file.type === "image/jpeg" ? "jpg" : "png";
-  const path = `${userId}/${crypto.randomUUID()}.${extension}`;
-  const { error } = await supabase.storage.from("ngo-verification").upload(path, file, {
-    contentType: file.type,
-    upsert: false,
-  });
-  if (error) throw error;
-  return path;
+  return value === "organization" || value === "contact";
 }
 
 export function NgoOnboardingPage() {
@@ -545,11 +545,7 @@ export function NgoOnboardingPage() {
     contact_designation: "",
     contact_email: "",
     contact_phone: "",
-    registration_certificate_path: null,
-    ngo_proof_path: null,
   });
-  const [registrationFile, setRegistrationFile] = useState<File | null>(null);
-  const [proofFile, setProofFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -558,7 +554,11 @@ export function NgoOnboardingPage() {
     let active = true;
     async function load() {
       if (!supabase || !session) { setLoading(false); return; }
-      const { data, error: loadError } = await supabase.from("ngo_profiles").select("*").eq("id", session.user.id).maybeSingle();
+      const { data, error: loadError } = await supabase
+        .from("ngo_profiles")
+        .select("organization_name, organization_address, registration_number, organization_type, description, contact_name, contact_designation, contact_email, contact_phone")
+        .eq("id", session.user.id)
+        .maybeSingle();
       if (!active) return;
       if (loadError) setError(loadError.message);
       else if (data) {
@@ -570,11 +570,11 @@ export function NgoOnboardingPage() {
           description: data.description,
           contact_name: data.contact_name,
           contact_designation: data.contact_designation,
-          contact_email: data.contact_email,
+          contact_email: data.contact_email ?? session.user.email ?? "",
           contact_phone: data.contact_phone,
-          registration_certificate_path: data.registration_certificate_path,
-          ngo_proof_path: data.ngo_proof_path,
         });
+      } else {
+        setError("The NGO organization profile was not found. Sign out and contact support before continuing.");
       }
       setLoading(false);
     }
@@ -593,38 +593,71 @@ export function NgoOnboardingPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     if (!supabase || !session) { setError("Your session is unavailable. Sign in again."); return; }
     setBusy(true);
     setError(null);
     try {
+      const submittedValues = new FormData(event.currentTarget);
+      const value = (field: keyof NgoDraft) => {
+        const submitted = submittedValues.get(field);
+        return typeof submitted === "string" ? submitted.trim() : draft[field]?.trim() ?? "";
+      };
       const changes: Partial<NgoDraft> = {};
       if (step === "organization") {
-        changes.organization_name = draft.organization_name?.trim() ?? "";
-        changes.organization_address = draft.organization_address?.trim() ?? "";
-        changes.registration_number = draft.registration_number?.trim() ?? "";
-        changes.organization_type = draft.organization_type?.trim() ?? "";
-        changes.description = draft.description?.trim() ?? "";
+        changes.organization_name = value("organization_name");
+        changes.organization_address = value("organization_address");
+        changes.registration_number = value("registration_number");
+        changes.organization_type = value("organization_type");
+        changes.description = value("description");
+        if (!changes.organization_type) {
+          throw new Error("Choose an organization type before continuing.");
+        }
       } else if (step === "contact") {
-        if (!isE164Phone(draft.contact_phone ?? "")) {
+        if (!isE164Phone(value("contact_phone"))) {
           throw new Error("Enter the contact phone number in international format, for example +14155552671.");
         }
-        changes.contact_name = draft.contact_name?.trim() ?? "";
-        changes.contact_designation = draft.contact_designation?.trim() ?? "";
-        changes.contact_email = draft.contact_email?.trim() ?? "";
-        changes.contact_phone = draft.contact_phone?.trim() ?? "";
-      } else {
-        if (!registrationFile && !draft.registration_certificate_path) throw new Error("Upload the organization's registration certificate.");
-        if (!proofFile && !draft.ngo_proof_path) throw new Error("Upload the additional organization verification document.");
-        if (registrationFile) changes.registration_certificate_path = await uploadNgoDocument(session.user.id, registrationFile);
-        if (proofFile) changes.ngo_proof_path = await uploadNgoDocument(session.user.id, proofFile);
+        changes.organization_name = value("organization_name");
+        changes.organization_address = value("organization_address");
+        changes.registration_number = value("registration_number");
+        changes.organization_type = value("organization_type");
+        changes.description = value("description");
+        changes.contact_name = value("contact_name");
+        changes.contact_designation = value("contact_designation");
+        changes.contact_email = value("contact_email");
+        changes.contact_phone = value("contact_phone");
       }
-      const { error: saveError } = await supabase.from("ngo_profiles").update(changes).eq("id", session.user.id);
-      if (saveError) throw saveError;
-      await refreshProfile();
+      const { data: savedProfile, error: saveError } = await supabase
+        .from("ngo_profiles")
+        .update(changes)
+        .eq("id", session.user.id)
+        .select("organization_name, organization_address, registration_number, organization_type, contact_name, contact_designation, contact_email, contact_phone")
+        .maybeSingle();
+      if (saveError) {
+        throw new Error(`Organization profile update failed: ${saveError.message}`);
+      }
+      if (!savedProfile) {
+        throw new Error("No organization profile row was updated. Check that the signed-in account has an NGO profile, then retry.");
+      }
+      if (step === "organization") {
+        const missingOrganizationDetails = getMissingNgoOrganizationDetails(savedProfile);
+        if (missingOrganizationDetails.length > 0) {
+          throw new Error(`The organization profile update did not save these required details: ${missingOrganizationDetails.join(", ")}. Correct them before continuing.`);
+        }
+      }
+      if (step === "contact") {
+        const missingDetails = getMissingNgoProfileDetails(savedProfile);
+        if (missingDetails.length > 0) {
+          throw new Error(`The organization profile was saved, but these required details are missing: ${missingDetails.join(", ")}. Reopen the organization or contact step and save them before continuing.`);
+        }
+      }
+      if (!await refreshProfile()) {
+        throw new Error("Your organization details were saved, but your application profile could not be reloaded. Refresh the page before continuing.");
+      }
       if (stepIndex < ngoSteps.length - 1) {
         navigate(`/onboarding/ngo/${ngoSteps[stepIndex + 1]}`);
       } else {
-        navigate("/verification/pending", { replace: true });
+        navigate("/ngo", { replace: true });
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -634,80 +667,37 @@ export function NgoOnboardingPage() {
   }
 
   if (loading) return <AuthLayout title="Loading organization profile"><LoadingState label="Loading saved onboarding details" /></AuthLayout>;
-  const title = step === "organization" ? "Organization Details" : step === "contact" ? "Contact Person Details" : "Organization Verification";
+  const title = step === "organization" ? "Organization Details" : "Contact Person Details";
   return (
-    <AuthLayout subtitle={`Step ${stepIndex + 1} of 3 · ${title}`} title="NGO Sign Up">
-      <div className="auth-stepper" aria-label={`Step ${stepIndex + 1} of 3`}>
+    <AuthLayout subtitle={`Step ${stepIndex + 1} of 2 · ${title}`} title="NGO Sign Up">
+      <div className="auth-stepper" aria-label={`Step ${stepIndex + 1} of 2`}>
         {ngoSteps.map((label, index) => <span className={index <= stepIndex ? "is-current" : ""} key={label}>{index + 1}<small>{label}</small></span>)}
       </div>
       <form className="auth-form-stack" onSubmit={(event) => void submit(event)}>
         <AuthFormError value={error} />
         {step === "organization" && <>
-          <TextField autoComplete="organization" label="Organization name" maxLength={180} onChange={(event) => updateDraft("organization_name", event.target.value)} required value={draft.organization_name ?? ""} />
-          <SelectField label="Organization type" onChange={(event) => updateDraft("organization_type", event.target.value)} options={[
+          <TextField autoComplete="organization" label="Organization name" maxLength={180} name="organization_name" onChange={(event) => updateDraft("organization_name", event.target.value)} required value={draft.organization_name ?? ""} />
+          <SelectField label="Organization type" name="organization_type" onChange={(event) => updateDraft("organization_type", event.target.value)} options={[
             { value: "nonprofit", label: "Nonprofit organization" },
             { value: "community", label: "Community organization" },
             { value: "shelter", label: "Shelter" },
             { value: "other", label: "Other" },
           ]} required value={draft.organization_type ?? ""} />
-          <TextField label="Registration number" onChange={(event) => updateDraft("registration_number", event.target.value)} required value={draft.registration_number ?? ""} />
-          <TextareaField autoComplete="street-address" label="Organization address" onChange={(event) => updateDraft("organization_address", event.target.value)} required value={draft.organization_address ?? ""} />
+          <TextField label="Registration number" name="registration_number" onChange={(event) => updateDraft("registration_number", event.target.value)} required value={draft.registration_number ?? ""} />
+          <TextareaField autoComplete="street-address" label="Organization address" name="organization_address" onChange={(event) => updateDraft("organization_address", event.target.value)} required value={draft.organization_address ?? ""} />
+          <TextareaField label="Organization description (optional)" maxLength={1000} name="description" onChange={(event) => updateDraft("description", event.target.value)} value={draft.description ?? ""} />
         </>}
         {step === "contact" && <>
-          <TextField autoComplete="name" label="Contact person's name" onChange={(event) => updateDraft("contact_name", event.target.value)} required value={draft.contact_name ?? ""} />
-          <TextField label="Role / designation" onChange={(event) => updateDraft("contact_designation", event.target.value)} required value={draft.contact_designation ?? ""} />
-          <TextField autoComplete="email" label="Contact email" onChange={(event) => updateDraft("contact_email", event.target.value)} required type="email" value={draft.contact_email ?? session?.user.email ?? ""} />
-          <TextField autoComplete="tel" hint="Include your country code." label="Contact phone" onChange={(event) => updateDraft("contact_phone", event.target.value)} required type="tel" value={draft.contact_phone ?? ""} />
-        </>}
-        {step === "verification" && <>
-          <p>Upload private organization records. Only your account can access these files until an approved review process is available.</p>
-          <DocumentField label="Registration certificate" file={registrationFile} onFile={setRegistrationFile} existing={draft.registration_certificate_path} />
-          <DocumentField label="Organization proof" file={proofFile} onFile={setProofFile} existing={draft.ngo_proof_path} />
+          <TextField autoComplete="name" label="Contact person's name" name="contact_name" onChange={(event) => updateDraft("contact_name", event.target.value)} required value={draft.contact_name ?? ""} />
+          <TextField label="Role / designation" name="contact_designation" onChange={(event) => updateDraft("contact_designation", event.target.value)} required value={draft.contact_designation ?? ""} />
+          <TextField autoComplete="email" label="Contact email" name="contact_email" onChange={(event) => updateDraft("contact_email", event.target.value)} required type="email" value={draft.contact_email ?? session?.user.email ?? ""} />
+          <TextField autoComplete="tel" hint="Include your country code." label="Contact phone" name="contact_phone" onChange={(event) => updateDraft("contact_phone", event.target.value)} required type="tel" value={draft.contact_phone ?? ""} />
         </>}
         <div className="auth-button-row">
           {stepIndex > 0 && <Button icon={<ArrowLeft size={16} />} onClick={() => navigate(`/onboarding/ngo/${ngoSteps[stepIndex - 1]}`)} type="button" variant="outline">Back</Button>}
-          <Button className="auth-submit" icon={stepIndex < 2 ? <ArrowRight size={16} /> : <ShieldCheck size={16} />} loading={busy} type="submit">{stepIndex < 2 ? "Next" : "Submit for Verification"}</Button>
+          <Button className="auth-submit" icon={stepIndex < ngoSteps.length - 1 ? <ArrowRight size={16} /> : undefined} loading={busy} type="submit">{stepIndex < ngoSteps.length - 1 ? "Next" : "Complete Registration"}</Button>
         </div>
       </form>
-    </AuthLayout>
-  );
-}
-
-function DocumentField({ label, file, onFile, existing }: { label: string; file: File | null; onFile: (file: File | null) => void; existing: string | null }) {
-  return (
-    <label className="ui-field">
-      <span className="ui-label">{label} <span className="ui-required">*</span></span>
-      <span className="ui-hint">PDF, JPG, or PNG up to 10 MB. Files stay private.</span>
-      <input accept="application/pdf,image/jpeg,image/png" className="ui-input auth-file-input" onChange={(event) => onFile(event.target.files?.[0] ?? null)} type="file" />
-      <span className="ui-hint">{file ? file.name : existing ? "A private document is already uploaded." : "No file selected."}</span>
-    </label>
-  );
-}
-
-export function VerificationPendingPage() {
-  const { ngoVerificationStatus } = useAuth();
-  const navigate = useNavigate();
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  async function signOut() {
-    if (!supabase) { setError(supabaseConfigurationError); return; }
-    setBusy(true);
-    const { error: signOutError } = await supabase.auth.signOut();
-    setBusy(false);
-    if (signOutError) setError(signOutError.message);
-    else navigate("/sign-in", { replace: true });
-  }
-  return (
-    <AuthLayout subtitle="Your organization application is in the verification queue." title={ngoVerificationStatus === "rejected" ? "Verification Needs Attention" : "Verification Pending"}>
-      <div className="auth-form-stack">
-        <div className="auth-feature-icon"><ShieldCheck aria-hidden="true" size={25} /></div>
-        <AuthFormError value={error} />
-        {ngoVerificationStatus === "rejected"
-          ? <p>Your application was not approved. Please contact the ResQPlate team for next steps; resubmission rules are not configured.</p>
-          : <p>Your organization details and private documents have been submitted. We will update this status when an authorized review process is available.</p>}
-        <div className="auth-status-row"><StatusBadge tone={ngoVerificationStatus === "rejected" ? "danger" : "warning"}>{ngoVerificationStatus ?? "pending"}</StatusBadge><span>Organization verification</span></div>
-        <Button loading={busy} onClick={() => void signOut()} type="button" variant="outline">Sign out</Button>
-      </div>
     </AuthLayout>
   );
 }

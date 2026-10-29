@@ -69,15 +69,27 @@ function renderOnboarding(initialPath = "/") {
   );
 }
 
+function renderNgo(initialPath = "/ngo") {
+  return render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <Routes>
+        <Route element={<RequireAccount role="ngo" />}>
+          <Route element={<p>NGO onboarding</p>} path="/onboarding/ngo/:step" />
+          <Route element={<p>NGO dashboard</p>} path="/ngo" />
+        </Route>
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("role-aware route protection", () => {
   const authState = (overrides: Partial<ReturnType<typeof useAuth>> = {}): ReturnType<typeof useAuth> => ({
     session,
     profile,
     roleOnboardingComplete: true,
-    ngoVerificationStatus: "verified",
     loading: false,
     profileError: null,
-    refreshProfile: async () => undefined,
+    refreshProfile: async () => true,
     ...overrides,
   });
 
@@ -108,6 +120,32 @@ describe("role-aware route protection", () => {
     vi.mocked(useAuth).mockReturnValue(authState({ profile: { ...profile, role: "ngo" } }));
     renderProtected("ngo", "/protected");
     expect(await screen.findByText("Protected content")).toBeInTheDocument();
+  });
+
+  it("allows a complete NGO to access the dashboard without verification approval", async () => {
+    vi.mocked(useAuth).mockReturnValue(authState({
+      profile: { ...profile, role: "ngo" },
+    }));
+    renderNgo();
+    expect(await screen.findByText("NGO dashboard")).toBeInTheDocument();
+  });
+
+  it("sends an incomplete NGO back to organization details", async () => {
+    vi.mocked(useAuth).mockReturnValue(authState({
+      profile: { ...profile, role: "ngo" },
+      roleOnboardingComplete: false,
+    }));
+    renderNgo();
+    expect(await screen.findByText("NGO onboarding")).toBeInTheDocument();
+    expect(screen.queryByText("NGO dashboard")).not.toBeInTheDocument();
+  });
+
+  it("keeps the existing NGO profile-edit route available after onboarding", async () => {
+    vi.mocked(useAuth).mockReturnValue(authState({
+      profile: { ...profile, role: "ngo" },
+    }));
+    renderNgo("/onboarding/ngo/contact");
+    expect(await screen.findByText("NGO onboarding")).toBeInTheDocument();
   });
 
   it("sends an authenticated null-role account to role selection without redirecting to a dashboard", async () => {

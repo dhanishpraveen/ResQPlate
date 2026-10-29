@@ -12,6 +12,7 @@ import type { Session } from "@supabase/supabase-js";
 import type { UserRole } from "../components/navigation";
 import type { Database } from "../lib/database.types";
 import { supabase } from "../lib/supabase";
+import { isNgoProfileComplete } from "./validation";
 
 type UserProfile = Database["public"]["Tables"]["user_profiles"]["Row"];
 
@@ -19,10 +20,9 @@ interface AuthState {
   session: Session | null;
   profile: UserProfile | null;
   roleOnboardingComplete: boolean | null;
-  ngoVerificationStatus: "pending" | "verified" | "rejected" | null;
   loading: boolean;
   profileError: string | null;
-  refreshProfile: () => Promise<void>;
+  refreshProfile: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -38,25 +38,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [roleOnboardingComplete, setRoleOnboardingComplete] = useState<boolean | null>(null);
-  const [ngoVerificationStatus, setNgoVerificationStatus] = useState<AuthState["ngoVerificationStatus"]>(null);
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
   const loadSequence = useRef(0);
   const profileUserId = useRef<string | null>(null);
 
-  const loadProfile = useCallback(async (userId: string) => {
+  const loadProfile = useCallback(async (userId: string): Promise<boolean> => {
     const sequence = ++loadSequence.current;
     setProfileError(null);
     if (profileUserId.current !== userId) {
       profileUserId.current = null;
       setProfile(null);
       setRoleOnboardingComplete(null);
-      setNgoVerificationStatus(null);
     }
 
     if (!supabase) {
       setProfileError("Supabase is not configured.");
-      return;
+      return false;
     }
 
     try {
@@ -68,11 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
       if (!userProfile) {
-        throw new Error("No profile row was found for this account.");
+        if (sequence !== loadSequence.current) return false;
+        profileUserId.current = userId;
+        setProfile(null);
+        setRoleOnboardingComplete(null);
+        return false;
       }
 
       let onboardingComplete: boolean | null = null;
-      let verificationStatus: AuthState["ngoVerificationStatus"] = null;
       if (userProfile.role === "donor") {
         const result = await supabase
           .from("donor_profiles")
@@ -85,13 +86,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else if (userProfile.role === "ngo") {
         const result = await supabase
           .from("ngo_profiles")
-          .select("onboarding_complete, verification_status")
+          .select("organization_name, organization_address, registration_number, organization_type, contact_name, contact_designation, contact_email, contact_phone")
           .eq("id", userId)
           .maybeSingle();
         if (result.error) throw result.error;
         if (!result.data) throw new Error("NGO profile record was not found for this account.");
-        onboardingComplete = result.data.onboarding_complete;
-        verificationStatus = result.data.verification_status;
+        onboardingComplete = isNgoProfileComplete(result.data);
       } else if (userProfile.role === "volunteer") {
         const result = await supabase
           .from("volunteer_profiles")
@@ -103,19 +103,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         onboardingComplete = result.data.onboarding_complete;
       }
 
-      if (sequence !== loadSequence.current) return;
+      if (sequence !== loadSequence.current) return false;
       profileUserId.current = userId;
       setProfile(userProfile);
       setRoleOnboardingComplete(onboardingComplete);
-      setNgoVerificationStatus(verificationStatus);
+      return true;
     } catch (error) {
-      if (sequence !== loadSequence.current) return;
+      if (sequence !== loadSequence.current) return false;
       setProfileError(describeProfileError(error instanceof Error ? error.message : String(error)));
+      return false;
     }
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    if (session?.user.id) await loadProfile(session.user.id);
+    if (!session?.user.id) return false;
+    return loadProfile(session.user.id);
   }, [loadProfile, session?.user.id]);
 
   useEffect(() => {
@@ -136,7 +138,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profileUserId.current = null;
         setProfile(null);
         setRoleOnboardingComplete(null);
-        setNgoVerificationStatus(null);
         setProfileError(null);
         setLoading(false);
         return;
@@ -181,11 +182,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     session,
     profile,
     roleOnboardingComplete,
-    ngoVerificationStatus,
     loading,
     profileError,
     refreshProfile,
-  }), [session, profile, roleOnboardingComplete, ngoVerificationStatus, loading, profileError, refreshProfile]);
+  }), [session, profile, roleOnboardingComplete, loading, profileError, refreshProfile]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

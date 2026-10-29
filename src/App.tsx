@@ -12,7 +12,6 @@ import {
   ResetPasswordPage,
   SignInPage,
   SignUpPage,
-  VerificationPendingPage,
 } from "./auth/pages";
 import {
   DonorDashboardPage,
@@ -23,6 +22,22 @@ import {
   PickupRequestDetailsPage,
   PickupRequestsPage,
 } from "./donor/pages";
+import {
+  AvailableDonationsPage,
+  ConfirmNgoReceiptPage,
+  NgoDashboardPage,
+  NgoDeliveryDetailsPage,
+  NgoDeliveriesPage,
+  NgoDonationDetailsPage,
+  NgoImpactPage,
+  NgoProfilePage,
+  NgoRequestsPage,
+  NgoSettingsPage,
+  NgoUnavailableFeaturePage,
+  ReceiptConfirmedPage,
+  RequestPickupPage,
+  RequestSubmittedPage,
+} from "./ngo/pages";
 import { AppShell, PageHeader } from "./components/layout";
 import { Card } from "./components/ui";
 
@@ -73,8 +88,22 @@ export function App() {
           </Route>
           <Route element={<RequireAccount role="ngo" />}>
             <Route element={<NgoOnboardingPage />} path="/onboarding/ngo/:step" />
-            <Route element={<VerificationPendingPage />} path="/verification/pending" />
-            <Route element={<FuturePhasePage role="ngo" />} path="/ngo" />
+            <Route element={<NgoDashboardPage />} path="/ngo" />
+            <Route element={<AvailableDonationsPage />} path="/ngo/donations" />
+            <Route element={<RequestPickupPage />} path="/ngo/donations/:donationId/request" />
+            <Route element={<NgoDonationDetailsPage />} path="/ngo/donations/:donationId" />
+            <Route element={<NgoRequestsPage />} path="/ngo/requests" />
+            <Route element={<RequestSubmittedPage />} path="/ngo/requests/:requestId/submitted" />
+            <Route element={<NgoDeliveryDetailsPage />} path="/ngo/requests/:requestId" />
+            <Route element={<NgoDeliveriesPage />} path="/ngo/deliveries" />
+            <Route element={<NgoDeliveryDetailsPage />} path="/ngo/deliveries/:requestId" />
+            <Route element={<ConfirmNgoReceiptPage />} path="/ngo/deliveries/:requestId/receipt" />
+            <Route element={<ReceiptConfirmedPage />} path="/ngo/deliveries/:requestId/receipt/confirmed" />
+            <Route element={<NgoImpactPage />} path="/ngo/impact" />
+            <Route element={<NgoUnavailableFeaturePage feature="Messages" />} path="/ngo/messages" />
+            <Route element={<NgoUnavailableFeaturePage feature="Notifications" />} path="/ngo/notifications" />
+            <Route element={<NgoProfilePage />} path="/ngo/profile" />
+            <Route element={<NgoSettingsPage />} path="/ngo/settings" />
           </Route>
           <Route element={<RequireAccount role="volunteer" />}>
             <Route element={<FuturePhasePage role="volunteer" />} path="/volunteer" />

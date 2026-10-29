@@ -77,7 +77,7 @@ function Sidebar({
             >
               <Icon aria-hidden="true" size={17} strokeWidth={1.8} />
               <span>{label}</span>
-              {label === "Notifications" && <span aria-label="3 unread" className="layout-nav-count">3</span>}
+              {label === "Notifications" && role !== "ngo" && <span aria-label="3 unread" className="layout-nav-count">3</span>}
             </Link>
           ))}
         </nav>
@@ -116,7 +116,7 @@ function AppHeader({
       <div className="layout-topbar-actions">
         <Link aria-label="Notifications" className="ui-icon-button layout-notification-button" to={`/${role}/notifications`}>
           <Bell size={19} />
-          <span aria-hidden="true" />
+          {role !== "ngo" && <span aria-hidden="true" />}
         </Link>
         <button
           aria-expanded={profileOpen}

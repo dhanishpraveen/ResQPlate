@@ -31,7 +31,7 @@ export function HomeRoute() {
 }
 
 export function RequireAccount({ role }: { role?: UserRole }) {
-  const { session, profile, loading, profileError, roleOnboardingComplete, ngoVerificationStatus } = useAuth();
+  const { session, profile, loading, profileError, roleOnboardingComplete } = useAuth();
   const location = useLocation();
 
   if (loading) return <AuthLayout title="Opening ResQPlate"><LoadingState label="Loading your account and permissions" /></AuthLayout>;
@@ -62,13 +62,7 @@ export function RequireAccount({ role }: { role?: UserRole }) {
   if (profile.role === "ngo" && roleOnboardingComplete === false && !path.startsWith("/onboarding/ngo")) {
     return <Navigate replace to="/onboarding/ngo/organization" />;
   }
-  if (profile.role === "ngo" && roleOnboardingComplete === true && ngoVerificationStatus !== "verified" && path !== "/verification/pending" && !path.startsWith("/onboarding/ngo")) {
-    return <Navigate replace to="/verification/pending" />;
-  }
   if (profile.role === "donor" && roleOnboardingComplete === true && path === "/onboarding/donor") {
-    return <Navigate replace to={roleHome(profile.role)} />;
-  }
-  if (profile.role === "ngo" && roleOnboardingComplete === true && ngoVerificationStatus === "verified" && path === "/verification/pending") {
     return <Navigate replace to={roleHome(profile.role)} />;
   }
 

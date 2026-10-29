@@ -226,12 +226,11 @@ already complete.
 ## Phase 2: Authentication and onboarding
 
 - **Objectives:** sign-in, registration/role selection, email verification,
-  profile completion, role onboarding, protected routes, and NGO verification
-  workflow foundations.
+  profile completion, role onboarding, and protected routes.
 - **Dependencies:** Phase 1; Supabase development project and authentication
   settings; approved role policy.
-- **Deliverables:** session handling, onboarding screens, route access
-  boundaries, and verification-pending UX.
+- **Deliverables:** session handling, onboarding screens, role access
+  boundaries, and role-aware dashboard routing.
 - **Likely areas:** auth pages/services, route/layout code, Supabase client,
   configuration, and tests.
 - **Acceptance:** auth flows work against the approved development project;
@@ -239,8 +238,8 @@ already complete.
   handled.
 - **Verification:** typecheck/build, auth-flow tests, and positive/negative
   access checks.
-- **Gate:** auth providers, role assignment authority, and verification
-  workflow are approved.
+- **Gate:** auth providers, role assignment authority, and authorization rules
+  are approved.
 
 ## Phase 3: Donor functionality
 
@@ -260,18 +259,144 @@ already complete.
 ## Phase 4: NGO functionality
 
 - **Objectives:** dashboard, available donations, details, pickup requests,
-  request management, delivery tracking, receipt confirmation, organization
-  profile, and verification.
+  request management, delivery tracking, receipt confirmation, and organization
+  profile.
 - **Dependencies:** Phases 1–3; reviewed organization and workflow policies.
 - **Deliverables:** NGO screens and access-controlled request/receipt flows.
 - **Likely areas:** NGO pages, request/delivery data logic, verification and
   Storage policy, and tests.
-- **Acceptance:** only eligible verified/authorized organizations can perform
-  approved actions; request and receipt transitions are auditable.
+- **Acceptance:** NGOs can enter the dashboard after required registration
+  details; data actions remain limited by their existing authorization
+  policies, and request/receipt transitions are auditable.
 - **Verification:** build, visual comparison, integration and denied-access
   tests.
 - **Gate:** organization membership/verification, request conflict behavior,
   and receipt correction rules are approved.
+
+### Phase 4 implementation status
+
+- Added NGO routes for the dashboard, available donations and details, pickup
+  request creation/submission, request tracking/details, delivery tracking and
+  details, receipt confirmation/success, impact, organization profile/settings,
+  messages, and notifications. NGO registration now has organization and
+  contact steps and routes directly to the dashboard after saving.
+- NGO data access uses the deployed `ngo_profiles`, `donations`,
+  `pickup_requests`, `pickup_request_status_history`, and `donation_handovers`
+  tables, private `ngo-verification` Storage, and the existing
+  `confirm_ngo_receipt` RPC. Queries request only fields needed by the screen;
+  donor names, addresses, contact fields, and evidence paths are not fetched
+  for pre-approval views.
+- Read-only inspection of production policies confirmed that NGOs can read
+  their own requests and insert a full-quantity request only when verified.
+  The only `donations` SELECT policy is donor-owned; there is no NGO SELECT
+  policy for available listings. RLS therefore hides donation rows from NGOs,
+  so discovery, details, and request creation could not initially be
+  completed through the live project. After approval, migration
+  `ngo_available_donations_rpc` added
+  `public.list_available_donations(uuid)`, a restricted `SECURITY DEFINER`
+  RPC that initially required a verified NGO and returns only the fields used
+  for discovery (no pickup address, instructions, or donor identity). After
+  production logs confirmed an authenticated caller was rejected by the
+  function's verification check (`42501`), approved migration
+  `allow_pending_ngo_listing_browse` changed that check to require an
+  authenticated NGO role but not verification. The RPC still only returns
+  unexpired `available` rows; pickup request submission remains restricted to
+  verified NGOs by the existing `can_submit_pickup_request` function. The
+  frontend uses the RPC and provides manual refresh controls. Authenticated
+  execution remains granted; anonymous execution remains denied.
+  Production log review confirmed the earlier 403s occurred before the new
+  migration was applied. A read-only smoke test under the authenticated
+  database role with pending-NGO claims returned one eligible listing and zero
+  ineligible rows. A separate donor-scoped RLS smoke test returned zero rows
+  belonging to other donors. The shared browser was not authenticated as an
+  NGO, so a real browser RPC/session journey remains unverified.
+- The database has no volunteer assignment/delivery table, NGO messaging or
+  notification store, NGO impact view, geographic fields, or NGO notification
+  preferences. Those routes disclose the missing capability instead of
+  displaying fabricated data. Delivery lists use pickup-request states only.
+  Receipt confirmation invokes the existing full-quantity RPC; partial
+  receipts, quality/evidence uploads, volunteer contact, and pickup location
+  disclosure are not implemented because no supported secure interface exists.
+- Visuals reuse the app shell and design tokens, with responsive listing,
+  request, status, receipt, profile, and verification patterns. Donation
+  photos remain placeholders because NGO access to the private donor-image
+  bucket is not authorized. The dashboard cannot show real nearby locations,
+  and profile/settings and success screens omit features the backend cannot
+  persist or authorize. The reference's volunteer coordination, charts, and
+  notification/message content are therefore unresolved visual/functionality
+  differences, not completed screens.
+- Added NGO request-filter/metrics/validation tests, available-list screen
+  tests, and verified/pending route-guard tests. `npm run typecheck`,
+  `npm test -- --reporter=verbose`, and `npm run build` passed (9 test files,
+  41 tests). Vite reports a 612.8 kB minified JavaScript chunk-size advisory.
+- **Phase 4 status: incomplete.** Core UI routes and existing authorized
+  request/receipt boundaries are wired, but backend gaps prevent several
+  reference workflows. Do not describe this phase as end-to-end complete until
+  those capabilities are implemented and tested.
+
+### NGO registration simplification
+
+- NGO registration now requires only organization and contact details. It
+  saves to the existing `ngo_profiles` row, verifies that each update returned
+  a row, skips the duplicate shared-profile prompt when the signup already
+  supplied account details, and submits all required fields together again on
+  final save. Persisted required fields are verified before routing directly to
+  `/ngo`; failures name the missing fields. No document upload or
+  verification-pending screen is part of registration.
+- Organization/contact submissions now read values from the actual form
+  submission, including the organization-type select, rather than relying
+  solely on React draft state. The live schema check confirmed
+  `organization_type` is nullable text with no constraint or NGO trigger
+  rewriting it; the self-update policy applies to the caller's own profile.
+  Added regression coverage for persisting the selected type even when the
+  rendered control differs from stale draft state. The affected confirmed
+  account's request payload was not available in the shared browser, so the
+  exact original client/server mismatch could not be independently captured.
+- The live schema inspection confirmed that organization/contact columns are
+  nullable and the NGO self-update RLS policy allows those fields without
+  document paths. The legacy `onboarding_complete` trigger still requires two
+  document paths; auth instead derives NGO readiness from the required
+  organization/contact fields. Role assignment remains in the existing
+  auth-trigger/`assign_initial_role` flow. No schema, policy, bucket, or
+  production data was changed.
+- No live schema/RLS blocker prevents saving required NGO fields to the
+  existing profile row. The separately approved donation-list RPC allows only
+  verified NGOs to discover available, unexpired listings;
+  `can_submit_pickup_request` likewise requires
+  `verification_status = 'verified'`. Direct dashboard route access works for
+  NGOs regardless of verification, but only verified organizations can browse
+  and request listings.
+- Automated tests cover the two-step registration, no Storage calls, update
+  errors/zero-row retries, NGO role metadata, direct dashboard navigation and
+  route access after a simulated refresh. Live authenticated signup and profile
+  writes remain unverified. The approved inventory's document-verification
+  and pending screens are intentionally superseded by this requested two-step
+  flow; visual comparison was not completed because the browser PDF viewer
+  did not render the page. The repository has no configured lint script.
+
+### Missing Auth application-profile recovery
+
+- Read-only live diagnostics found an Auth account without a corresponding
+  `user_profiles` row and no NGO profile row. The existing
+  `assign_initial_role` RPC only updated an existing row whose role was null,
+  so it could not recover this account; direct client inserts are correctly
+  blocked by grants and RLS.
+- The client now treats a missing profile row as an unassigned account and
+  routes it to role selection instead of a profile-load error. Signup metadata
+  only preselects the role; the user confirms it and the client calls the
+  trusted RPC. Database errors remain visible, and the dashboard is not
+  entered until profile state can be loaded.
+- Added `supabase/migrations/20261029000002_repair_initial_role_profiles.sql`
+  as a **proposed, unapplied migration**. It makes the self-scoped RPC
+  idempotently create the caller's missing base and role-specific profile,
+  preserve an already assigned matching role, and reject a conflicting role.
+  The application cannot complete profile recovery until this function
+  definition is reviewed and applied to the intended Supabase project.
+- Auth/profile recovery tests cover an NGO orphan, successful RPC recovery,
+  and visible RPC failure without a redirect loop. No migration or live data
+  was changed, and a real signup/confirmation with database verification
+  remains blocked on approval to apply the migration and access to a test
+  account.
 
 ## Phase 5: Volunteer functionality
 
@@ -339,3 +464,30 @@ already complete.
 These phases are sequential dependencies, not separate repositories or
 applications. Work in a phase may be split into small, reviewable increments
 without moving the overall application to a new codebase.
+
+## NGO donation image workflow (prepared; database approval pending)
+
+- Inspected the NGO available-donation design on PDF page 23 and confirmed
+  that food photographs belong in the compact donation rows. The live
+  `donations.photo_path` field and private `donation-images` bucket already
+  exist. The 10 demo rows currently have no image references.
+- Shared private signed-URL loading is now used by the donor and NGO screens.
+  NGO listing cards, donation details, and request summaries display signed
+  images with the existing labelled fallback if an image is missing or fails
+  to load.
+- Added an unapplied migration proposal to return `photo_path` from
+  `list_available_donations` and allow only authenticated NGO-role users to
+  read image objects linked to available, unexpired donations. The RPC return
+  type requires a drop/recreate; read-only preflight found no database
+  dependencies on the existing RPC, and the migration preserves its
+  authentication checks and execute grants. The policy does not make the
+  bucket public or relax donor upload rules.
+- No migration or Storage policy has been applied. No food-image generator is
+  available in this session, and no authenticated donor session is available
+  to upload through the existing donor UI. Consequently, no image files were
+  generated, uploaded, or linked. The cancelled demo row is additionally not
+  editable through the existing donor workflow; it remains outside the
+  authorized upload path.
+- **Status:** UI implementation is in place; backend access awaits explicit
+  approval, and image assets/uploads remain blocked pending suitable licensed
+  images and an authenticated donor session.
