@@ -2,7 +2,10 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from .model import SUPPORTED_CATEGORIES, SUPPORTED_MEAL_PERIODS, validate_timestamp
+if __package__:
+    from .model import SUPPORTED_CATEGORIES, SUPPORTED_MEAL_PERIODS, validate_timestamp
+else:
+    from model import SUPPORTED_CATEGORIES, SUPPORTED_MEAL_PERIODS, validate_timestamp
 
 
 class PredictionRequest(BaseModel):

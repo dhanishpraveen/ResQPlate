@@ -2,9 +2,14 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 
-from .model import FEATURE_COLUMNS, MODEL_VERSION, TARGET_UNIT, load_model, predict
-from .matching_schemas import MatchRequest
-from .schemas import PredictionRequest
+if __package__:
+    from .model import FEATURE_COLUMNS, MODEL_VERSION, TARGET_UNIT, load_model, predict
+    from .matching_schemas import MatchRequest
+    from .schemas import PredictionRequest
+else:
+    from model import FEATURE_COLUMNS, MODEL_VERSION, TARGET_UNIT, load_model, predict
+    from matching_schemas import MatchRequest
+    from schemas import PredictionRequest
 
 MODEL_PATH = Path(__file__).parent / "artifacts" / "surplus_model.joblib"
 app = FastAPI(title="ResQPlate surplus prediction service", version=MODEL_VERSION)
@@ -47,7 +52,10 @@ def predict_surplus(request: PredictionRequest) -> dict[str, object]:
 
 @app.post("/match")
 def match_candidates(request: MatchRequest) -> dict[str, object]:
-    from .matching import rank_matches
+    if __package__:
+        from .matching import rank_matches
+    else:
+        from matching import rank_matches
 
     results = rank_matches(request.to_domain(), [candidate.to_domain() for candidate in request.candidates])
     return {

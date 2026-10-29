@@ -2,7 +2,10 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from .matching import Demand, MatchCandidate
+if __package__:
+    from .matching import Demand, MatchCandidate
+else:
+    from matching import Demand, MatchCandidate
 
 
 class MatchCandidateRequest(BaseModel):

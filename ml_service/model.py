@@ -13,7 +13,10 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
-from .dataset import FOOD_CATEGORIES, MEAL_PERIODS, generate_demo_hotel_history
+if __package__:
+    from .dataset import FOOD_CATEGORIES, MEAL_PERIODS, generate_demo_hotel_history
+else:
+    from dataset import FOOD_CATEGORIES, MEAL_PERIODS, generate_demo_hotel_history
 
 MODEL_VERSION: Final = "rf-demo-hotel-v2"
 TARGET_UNIT: Final = "servings"
