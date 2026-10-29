@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -7,8 +7,8 @@ import {
   Check,
   Clock3,
   MapPin,
+  LocateFixed,
   PackageCheck,
-  Phone,
   RefreshCw,
   Truck,
   Utensils,
@@ -30,14 +30,20 @@ import {
   TextField,
 } from "../components/ui";
 import { supabase, supabaseConfigurationError } from "../lib/supabase";
+import { MapContainer, Marker, TileLayer, useMap } from "react-leaflet";
+import type { LatLngTuple } from "leaflet";
+import "leaflet/dist/leaflet.css";
 import {
   claimVolunteerTask,
-  confirmVolunteerDelivery,
+  coordinatesAreValid,
+  coordinatePair,
   confirmVolunteerPickup,
   fetchVolunteerTasks,
+  distanceInKilometers,
   isAssignedVolunteerTask,
   taskStatusLabel,
   taskDeliveryLabel,
+  volunteerNavigationStage,
   type VolunteerTask,
 } from "./data";
 
@@ -52,6 +58,27 @@ function messageOf(error: unknown) {
     return error.message;
   }
   return String(error);
+}
+
+async function messageOfEdgeError(error: unknown) {
+  if (typeof error === "object" && error !== null && "context" in error && error.context instanceof Response) {
+    const response = error.context;
+    try {
+      const body: unknown = await response.clone().json();
+      if (typeof body === "object" && body !== null && "error" in body && typeof body.error === "string") {
+        return body.error;
+      }
+    } catch {
+      if (response.status) {
+        return `Delivery verification service returned HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}.`;
+      }
+    }
+  }
+  const message = messageOf(error);
+  if (message.toLowerCase().includes("failed to send a request to the edge function")) {
+    return "Could not reach the delivery verification service. Check the function deployment, allowed browser origin, and network connection, then try again.";
+  }
+  return message;
 }
 
 function dateLabel(value: string | null) {
@@ -179,40 +206,54 @@ function directionsUrl(address: string | null) {
     : null;
 }
 
-function DeliveryLocationCard({
-  address,
-  contact,
-  label,
-  phone,
-  tone,
+function mapDirectionsUrl(
+  destinationAddress: string | null,
+  destinationLatitude: number | null,
+  destinationLongitude: number | null,
+  origin: { latitude: number; longitude: number } | null,
+) {
+  const destination = coordinatesAreValid(destinationLatitude, destinationLongitude)
+    ? `${destinationLatitude},${destinationLongitude}`
+    : destinationAddress;
+  if (!destination) return null;
+  const originQuery = origin ? `&origin=${origin.latitude},${origin.longitude}` : "";
+  return `https://www.google.com/maps/dir/?api=1${originQuery}&destination=${encodeURIComponent(destination)}`;
+}
+
+function VolunteerMapViewport({ points }: { points: LatLngTuple[] }) {
+  const map = useMap();
+  useEffect(() => {
+    map.invalidateSize();
+    if (points.length > 1) {
+      map.fitBounds(points, { padding: [28, 28], maxZoom: 15 });
+    } else if (points.length === 1) {
+      map.setView(points[0], 14);
+    }
+  }, [map, points]);
+  return null;
+}
+
+function VolunteerRouteMap({
+  destination,
+  current,
 }: {
-  address: string | null;
-  contact: string | null;
-  label: string;
-  phone: string | null;
-  tone: "pickup" | "dropoff";
+  destination: { latitude: number | null; longitude: number | null };
+  current: { latitude: number; longitude: number } | null;
 }) {
-  const url = directionsUrl(address);
+  const destinationPoint = coordinatePair(destination.latitude, destination.longitude);
+  const points: LatLngTuple[] = [];
+  if (destinationPoint) points.push([destinationPoint.latitude, destinationPoint.longitude]);
+  if (current) points.push([current.latitude, current.longitude]);
+  if (points.length === 0) return null;
   return (
-    <section className={`volunteer-location-card volunteer-location-card--${tone}`}>
-      <div className="volunteer-location-card-header">
-        <div className="volunteer-location-card-title">
-          <span className="volunteer-location-pin"><MapPin aria-hidden="true" size={17} /></span>
-          <div>
-            <small>{label}</small>
-            <h3>{tone === "pickup" ? "Donor pickup" : "NGO drop-off"}</h3>
-          </div>
-        </div>
-        {url && <a className="volunteer-directions-link" href={url} rel="noreferrer" target="_blank">Directions <ArrowRight aria-hidden="true" size={14} /></a>}
-      </div>
-      <p className="volunteer-location-address">{address ?? "Address unavailable for this task."}</p>
-      {contact && <p className="volunteer-location-contact">{contact}</p>}
-      {phone && <a className="volunteer-location-phone" href={`tel:${phone}`}><Phone aria-hidden="true" size={14} />{phone}</a>}
-      <div className="volunteer-map-fallback" role="note">
-        <MapPin aria-hidden="true" size={16} />
-        <span>{address ? "Map preview unavailable because this delivery has no saved coordinates." : "A map cannot be shown until a location is saved."}</span>
-      </div>
-    </section>
+    <div aria-label="Active delivery destination map" className="volunteer-route-map">
+      <MapContainer center={points[0]} className="volunteer-route-map-canvas" scrollWheelZoom={false} zoom={12}>
+        <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <VolunteerMapViewport points={points} />
+        {destinationPoint && <Marker position={[destinationPoint.latitude, destinationPoint.longitude]} />}
+        {current && <Marker position={[current.latitude, current.longitude]} />}
+      </MapContainer>
+    </div>
   );
 }
 
@@ -361,10 +402,41 @@ export function VolunteerTaskDetailsPage() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpBusy, setOtpBusy] = useState(false);
   const task = data?.find((item) => item.request_id === requestId) ?? null;
   const assigned = task ? isAssignedVolunteerTask(task) : false;
+  const stage = task ? volunteerNavigationStage(task) : "before_acceptance";
+  const targetIsDropoff = stage === "dropoff";
+  const routeAddress = targetIsDropoff ? task?.dropoff_address ?? task?.ngo_address ?? null : task?.pickup_address ?? null;
+  const routeLatitude = targetIsDropoff ? task?.dropoff_latitude ?? null : task?.pickup_latitude ?? null;
+  const routeLongitude = targetIsDropoff ? task?.dropoff_longitude ?? null : task?.pickup_longitude ?? null;
+  const routePoint = coordinatePair(routeLatitude, routeLongitude);
 
-  async function perform(action: "claim" | "pickup" | "delivery") {
+  function locateVolunteer() {
+    if (!navigator.geolocation) {
+      setActionError("This browser does not support location access. Use the destination address instead.");
+      return;
+    }
+    setLocating(true);
+    setActionError(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCurrentLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+        setLocating(false);
+      },
+      () => {
+        setActionError("Your current location could not be read. Allow location access or use the destination address instead.");
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
+    );
+  }
+
+  async function perform(action: "claim" | "pickup") {
     if (!supabase || !task || busy) return;
     setBusy(true);
     setActionError(null);
@@ -377,9 +449,6 @@ export function VolunteerTaskDetailsPage() {
         await confirmVolunteerPickup(supabase, task.request_id, note.trim() || null);
         setSuccess("Pickup recorded. You can now deliver the food to the receiving organization.");
         setNote("");
-      } else {
-        await confirmVolunteerDelivery(supabase, task.request_id);
-        setSuccess("Delivery recorded. The receiving organization will confirm final receipt.");
       }
       await reload();
     } catch (cause) {
@@ -390,13 +459,58 @@ export function VolunteerTaskDetailsPage() {
     }
   }
 
-  const action = !task ? null : !assigned
-    ? <Button icon={<Check size={16} />} loading={busy} onClick={() => void perform("claim")}>Start task</Button>
-    : task.status === "confirmed"
-      ? <Button icon={<Check size={16} />} loading={busy} onClick={() => void perform("pickup")}>Mark picked up</Button>
-      : task.status === "picked_up" && !task.volunteer_delivered_at
-        ? <Button icon={<Check size={16} />} loading={busy} onClick={() => void perform("delivery")}>Mark delivered</Button>
-        : null;
+  async function sendDeliveryOtp() {
+    if (!supabase || !task || otpBusy) return;
+    setOtpBusy(true);
+    setActionError(null);
+    setSuccess(null);
+    try {
+      const { data: result, error: functionError } = await supabase.functions.invoke("delivery-otp", {
+        body: { action: "send", request_id: task.request_id },
+      });
+      if (functionError) throw functionError;
+      if (!result || result.ok !== true) throw new Error("The delivery verification code could not be sent.");
+      setOtpSent(true);
+      setOtpCode("");
+      setSuccess("A verification code was sent to the NGO's verified owner mobile.");
+    } catch (cause) {
+      setActionError(await messageOfEdgeError(cause));
+    } finally {
+      setOtpBusy(false);
+    }
+  }
+
+  async function verifyDeliveryOtp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !task || otpBusy) return;
+    setOtpBusy(true);
+    setActionError(null);
+    setSuccess(null);
+    try {
+      const { data: result, error: functionError } = await supabase.functions.invoke("delivery-otp", {
+        body: { action: "verify", request_id: task.request_id, otp: otpCode },
+      });
+      if (functionError) throw functionError;
+      if (!result || result.ok !== true) throw new Error("Delivery verification was not confirmed.");
+      setOtpCode("");
+      setOtpSent(false);
+      setSuccess("NGO delivery verified. The organization will confirm final receipt.");
+      await reload();
+    } catch (cause) {
+      setActionError(await messageOfEdgeError(cause));
+    } finally {
+      setOtpBusy(false);
+    }
+  }
+
+  const action = !task ? null
+    : stage === "before_acceptance"
+      ? <Button icon={<Check size={16} />} loading={busy} onClick={() => void perform("claim")}>Accept Task</Button>
+      : stage === "pickup"
+        ? <Button icon={<Check size={16} />} loading={busy} onClick={() => void perform("pickup")}>Mark Food Collected</Button>
+        : stage === "dropoff"
+          ? !otpSent && <Button icon={<Check size={16} />} loading={otpBusy} onClick={() => void sendDeliveryOtp()}>Reached NGO / Start Delivery Verification</Button>
+          : null;
 
   return (
   <VolunteerShell
@@ -425,21 +539,99 @@ export function VolunteerTaskDetailsPage() {
                 <div className="volunteer-detail-facts">
                   <div><CalendarClock size={17} /><span><small>Pickup schedule</small><strong>{dateLabel(task.pickup_at)}</strong></span></div>
                   <div><Clock3 size={17} /><span><small>Food expiry</small><strong>{dateLabel(task.expires_at)}</strong></span></div>
-                  <div><Utensils size={17} /><span><small>Food handling</small><strong>{task.pickup_instructions ?? "Follow safe food-handling practices during transport."}</strong></span></div>
+                  <div><Utensils size={17} /><span><small>Food handling</small><strong>{stage === "pickup" ? task.pickup_instructions ?? "Follow safe food-handling practices during transport." : "Follow safe food-handling practices during transport."}</strong></span></div>
                 </div>
               </Card>
               <section className="volunteer-location-section">
-                <SectionHeading description="Use the address links for navigation. Saved coordinates are not available for this delivery." title="Pickup and drop-off" />
-                <div className="volunteer-location-grid">
-                  <DeliveryLocationCard address={task.pickup_address} contact={task.donor_name} label="Step 1" phone={task.donor_phone} tone="pickup" />
-                  <DeliveryLocationCard address={task.ngo_address} contact={task.ngo_name ?? task.ngo_contact_name} label="Step 2" phone={task.ngo_contact_phone} tone="dropoff" />
-                </div>
+                {stage === "before_acceptance" && (
+                  <>
+                    <SectionHeading description="Review both saved locations and estimated distance before accepting. Navigation and contact details remain hidden until assignment." title="Task locations" />
+                    <div className="volunteer-location-grid">
+                      <article className="volunteer-location-card volunteer-location-card--pickup">
+                        <h3>Donor pickup</h3>
+                        <p className="volunteer-location-address">{task.pickup_address ?? "Address unavailable for this task."}</p>
+                      </article>
+                      <article className="volunteer-location-card volunteer-location-card--dropoff">
+                        <h3>NGO drop-off</h3>
+                        <p className="volunteer-location-address">{task.dropoff_address ?? task.ngo_address ?? "Address unavailable for this task."}</p>
+                      </article>
+                    </div>
+                    <div className="volunteer-route-summary">
+                      {(() => {
+                        const pickupPoint = coordinatePair(task.pickup_latitude, task.pickup_longitude);
+                        const dropoffPoint = coordinatePair(task.dropoff_latitude, task.dropoff_longitude);
+                        return pickupPoint && dropoffPoint
+                          ? <span>Estimated distance: {distanceInKilometers(pickupPoint.latitude, pickupPoint.longitude, dropoffPoint.latitude, dropoffPoint.longitude).toFixed(1)} km</span>
+                          : <span>Estimated distance unavailable because saved coordinates are missing.</span>;
+                      })()}
+                    </div>
+                  </>
+                )}
+                {stage === "pickup" && (
+                  <>
+                    <SectionHeading description="Navigate only to the donor pickup location. The map and directions switch to the NGO after collection is recorded." title="Donor pickup" />
+                    <p className="volunteer-location-address">{task.pickup_address ?? "Address unavailable for this task."}</p>
+                    {routePoint
+                      ? <VolunteerRouteMap current={currentLocation} destination={routePoint} />
+                      : <InlineAlert tone="warning">Pickup coordinates are unavailable, so the map cannot be shown. Use the saved address for directions.</InlineAlert>}
+                    <div className="volunteer-route-summary">
+                      <Button icon={<LocateFixed size={15} />} loading={locating} onClick={locateVolunteer} variant="outline">Use my location for directions</Button>
+                      {currentLocation
+                        ? (() => {
+                          const url = mapDirectionsUrl(routeAddress, routeLatitude, routeLongitude, currentLocation);
+                          return url && <a className="volunteer-directions-link" href={url} rel="noreferrer" target="_blank">Directions to pickup <ArrowRight size={14} /></a>;
+                        })()
+                        : routeAddress && <a className="volunteer-directions-link" href={directionsUrl(routeAddress) ?? undefined} rel="noreferrer" target="_blank">Open pickup directions <ArrowRight size={14} /></a>}
+                    </div>
+                  </>
+                )}
+                {stage === "dropoff" && (
+                  <>
+                    <SectionHeading description="Food collection was recorded. Navigate only to the NGO drop-off location." title="NGO drop-off" />
+                    <p className="volunteer-location-address">{task.dropoff_address ?? task.ngo_address ?? "Address unavailable for this task."}</p>
+                    {routePoint
+                      ? <VolunteerRouteMap current={currentLocation} destination={routePoint} />
+                      : <InlineAlert tone="warning">NGO coordinates are unavailable, so the map cannot be shown. Use the saved address for directions.</InlineAlert>}
+                    <div className="volunteer-route-summary">
+                      <Button icon={<LocateFixed size={15} />} loading={locating} onClick={locateVolunteer} variant="outline">Use my location for directions</Button>
+                      {currentLocation
+                        ? (() => {
+                          const url = mapDirectionsUrl(routeAddress, routeLatitude, routeLongitude, currentLocation);
+                          return url && <a className="volunteer-directions-link" href={url} rel="noreferrer" target="_blank">Directions to NGO <ArrowRight size={14} /></a>;
+                        })()
+                        : routeAddress && <a className="volunteer-directions-link" href={directionsUrl(routeAddress) ?? undefined} rel="noreferrer" target="_blank">Open NGO directions <ArrowRight size={14} /></a>}
+                    </div>
+                    {otpSent && (
+                      <form className="volunteer-otp-form" onSubmit={(event) => void verifyDeliveryOtp(event)}>
+                        <label htmlFor="delivery-otp">NGO delivery verification code</label>
+                        <input
+                          autoComplete="one-time-code"
+                          id="delivery-otp"
+                          inputMode="numeric"
+                          maxLength={6}
+                          onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                          pattern="[0-9]{6}"
+                          required
+                          value={otpCode}
+                        />
+                        <Button disabled={otpCode.length !== 6} loading={otpBusy} type="submit">Verify delivery code</Button>
+                        <Button disabled={otpBusy} loading={otpBusy} onClick={() => void sendDeliveryOtp()} type="button" variant="outline">Resend code</Button>
+                      </form>
+                    )}
+                  </>
+                )}
+                {stage === "awaiting_receipt" && (
+                  <>
+                    <SectionHeading description="The NGO verified delivery. Final receipt confirmation remains with the organization." title="Delivery verified" />
+                    <InlineAlert tone="success">Delivery verification is complete; awaiting NGO receipt confirmation.</InlineAlert>
+                  </>
+                )}
               </section>
               <Card className="volunteer-action-card" padding="lg">
                 <SectionHeading description={assigned ? "Actions are enabled only for the current backend status." : "Accepting assigns this task to you atomically."} title="Verification and actions" />
                 {assigned && task.status === "confirmed" && <TextareaField hint="Optional note recorded with the pickup handover." label="Pickup note" maxLength={1000} onChange={(event) => setNote(event.target.value)} value={note} />}
-                {assigned && task.status === "confirmed" && <InlineAlert tone="info">Pickup OTP verification is not configured in the current backend. The existing authorized pickup action is available.</InlineAlert>}
-                {assigned && task.status === "picked_up" && !task.volunteer_delivered_at && <InlineAlert tone="info">The pickup is recorded. Confirm delivery after the organization receives the food; NGO receipt confirmation remains a separate stage.</InlineAlert>}
+                {stage === "pickup" && <InlineAlert tone="info">After collection is recorded, navigation switches to the NGO drop-off and delivery verification becomes available.</InlineAlert>}
+                {stage === "dropoff" && !otpSent && <InlineAlert tone="info">At the NGO, request a one-time code sent to the verified owner mobile. Delivery is not recorded until the server verifies it.</InlineAlert>}
                 {task.volunteer_delivered_at && task.status !== "completed" && <InlineAlert tone="success" title="Awaiting NGO confirmation">Delivery recorded on {dateLabel(task.volunteer_delivered_at)}. The NGO still needs to confirm receipt.</InlineAlert>}
                 {task.status === "completed" && <InlineAlert tone="success" title="Verified">The organization confirmed receipt.</InlineAlert>}
                 {action && <div className="volunteer-detail-action">{action}</div>}

@@ -40,10 +40,12 @@ import { supabase, supabaseConfigurationError } from "../lib/supabase";
 import type { Database } from "../lib/database.types";
 import {
   fetchCompletedImpact,
+  createDonation,
   fetchDonations,
   fetchPickupRequests,
   fetchSignedImages,
   buildDonationWriteValues,
+  formatDonationSaveError,
   uploadPrivateImage,
   type CompletedImpactRow,
   type DonationRow,
@@ -544,6 +546,8 @@ export function DonationFormPage() {
         unit: draft.unit,
         expires_at: new Date(draft.expires_at).toISOString(),
         pickup_address: draft.pickup_address.trim(),
+        pickup_latitude: draft.pickup_latitude ?? null,
+        pickup_longitude: draft.pickup_longitude ?? null,
         pickup_instructions: draft.pickup_instructions?.trim() || null,
         photo_path: photoPath,
         status,
@@ -554,19 +558,14 @@ export function DonationFormPage() {
         if (saveError) throw saveError;
         savedId = data.id;
       } else {
-        const { data, error: saveError } = await supabase.from("donations").insert({
-          donor_id: session.user.id,
-          ...values,
-        }).select("id").single();
-        if (saveError) throw saveError;
-        savedId = data.id;
+        savedId = await createDonation(supabase, session.user.id, values);
       }
       navigate(`/donor/donations/${savedId}`, {
         replace: false,
         state: { success: status === "draft" ? "Draft saved." : "Donation published." },
       });
     } catch (caught) {
-      let detail = messageOf(caught);
+      let detail = formatDonationSaveError(caught);
       if (uploadedPath) {
         const { error: cleanupError } = await supabase.storage.from("donation-images").remove([uploadedPath]);
         if (cleanupError) detail += ` The uploaded image could not be removed: ${cleanupError.message}`;

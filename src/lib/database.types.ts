@@ -129,6 +129,12 @@ type VolunteerTask = {
   ngo_contact_phone: string | null;
   volunteer_picked_up_at: string | null;
   volunteer_delivered_at: string | null;
+  pickup_latitude: number | null;
+  pickup_longitude: number | null;
+  dropoff_address: string | null;
+  dropoff_latitude: number | null;
+  dropoff_longitude: number | null;
+  volunteer_assigned: boolean;
 };
 
 type SurplusForecast = {
@@ -351,10 +357,6 @@ export type Database = {
       };
       volunteer_confirm_pickup: {
         Args: { p_request_id: string; p_note?: string | null };
-        Returns: undefined;
-      };
-      volunteer_confirm_delivery: {
-        Args: { p_request_id: string };
         Returns: undefined;
       };
       reserve_donation_quantity: {
