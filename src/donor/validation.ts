@@ -1,9 +1,11 @@
 import type { Database } from "../lib/database.types";
 
 export type DonationDraft = Pick<
-  Database["public"]["Tables"]["donations"]["Insert"],
+  Database["public"]["Tables"]["donations"]["Row"],
   "food_name" | "cuisine_type" | "description" | "quantity" | "unit" | "expires_at" | "pickup_address"
 > & {
+  pickup_latitude?: number | null;
+  pickup_longitude?: number | null;
   pickup_instructions: string | null;
   photo: File | null;
 };

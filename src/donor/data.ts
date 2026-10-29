@@ -6,6 +6,23 @@ export type PickupRequestRow = Database["public"]["Views"]["donor_pickup_request
 export type CompletedImpactRow = Database["public"]["Views"]["donor_completed_impact"]["Row"];
 type Client = SupabaseClient<Database>;
 
+export type DonationWriteValues = {
+  food_name: string;
+  cuisine_type: string;
+  description: string;
+  quantity: number;
+  unit: DonationRow["unit"];
+  expires_at: string;
+  pickup_address: string;
+  pickup_instructions: string | null;
+  photo_path: string | null;
+  status: DonationRow["status"];
+};
+
+export function buildDonationWriteValues(input: DonationWriteValues): DonationWriteValues {
+  return input;
+}
+
 export async function fetchDonations(client: Client, donorId: string) {
   const { data, error } = await client
     .from("donations")

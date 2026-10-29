@@ -4,6 +4,7 @@ import type { Database } from "../lib/database.types";
 type Client = SupabaseClient<Database>;
 type DonationRow = Database["public"]["Tables"]["donations"]["Row"];
 type RequestRow = Database["public"]["Tables"]["pickup_requests"]["Row"];
+export type PickupRequestInsert = Database["public"]["Tables"]["pickup_requests"]["Insert"];
 type RequestHistoryRow = Database["public"]["Tables"]["pickup_request_status_history"]["Row"];
 type HandoverRow = Database["public"]["Tables"]["donation_handovers"]["Row"];
 type ProfileRow = Database["public"]["Tables"]["ngo_profiles"]["Row"];
@@ -24,8 +25,12 @@ export type NgoProfile = Pick<
   ProfileRow,
   "id" | "organization_name" | "organization_address" | "registration_number" | "organization_type" |
   "description" | "contact_name" | "contact_designation" | "contact_email" | "contact_phone" |
-  "registration_certificate_path" | "ngo_proof_path"
+  "registration_certificate_path" | "ngo_proof_path" | "organization_latitude" | "organization_longitude"
 >;
+
+export function buildPickupRequestValues(input: PickupRequestInsert): PickupRequestInsert {
+  return input;
+}
 
 export async function fetchAvailableDonations(client: Client) {
   const { data, error } = await client.rpc("list_available_donations", { p_donation_id: null });
@@ -118,7 +123,7 @@ export async function fetchHandover(client: Client, requestId: string) {
 export async function fetchNgoProfile(client: Client, ngoId: string) {
   const { data, error } = await client
     .from("ngo_profiles")
-    .select("id, organization_name, organization_address, registration_number, organization_type, description, contact_name, contact_designation, contact_email, contact_phone, registration_certificate_path, ngo_proof_path")
+    .select("id, organization_name, organization_address, registration_number, organization_type, description, contact_name, contact_designation, contact_email, contact_phone, registration_certificate_path, ngo_proof_path, organization_latitude, organization_longitude")
     .eq("id", ngoId)
     .maybeSingle();
   if (error) throw error;

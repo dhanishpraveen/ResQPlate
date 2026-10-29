@@ -18,6 +18,7 @@ import {
   BrainCircuit,
 } from "lucide-react";
 import { AppShell, PageHeader } from "../components/layout";
+import { LocationInput } from "../components/location-input";
 import {
   Button,
   Card,
@@ -42,6 +43,7 @@ import {
   fetchDonations,
   fetchPickupRequests,
   fetchSignedImages,
+  buildDonationWriteValues,
   uploadPrivateImage,
   type CompletedImpactRow,
   type DonationRow,
@@ -461,6 +463,8 @@ export function DonationFormPage() {
     unit: "servings",
     expires_at: "",
     pickup_address: "",
+    pickup_latitude: null,
+    pickup_longitude: null,
     pickup_instructions: "",
     photo: null,
   });
@@ -489,6 +493,8 @@ export function DonationFormPage() {
           unit: data.unit,
           expires_at: localDateTime(data.expires_at),
           pickup_address: data.pickup_address,
+          pickup_latitude: data.pickup_latitude,
+          pickup_longitude: data.pickup_longitude,
           pickup_instructions: data.pickup_instructions,
           photo: null,
         });
@@ -530,7 +536,7 @@ export function DonationFormPage() {
         uploadedPath = await uploadPrivateImage(supabase, "donation-images", session.user.id, draft.photo);
         photoPath = uploadedPath;
       }
-      const values = {
+      const values = buildDonationWriteValues({
         food_name: draft.food_name.trim(),
         cuisine_type: draft.cuisine_type.trim(),
         description: draft.description.trim(),
@@ -541,7 +547,7 @@ export function DonationFormPage() {
         pickup_instructions: draft.pickup_instructions?.trim() || null,
         photo_path: photoPath,
         status,
-      };
+      });
       let savedId: string;
       if (isEditing && donationId) {
         const { data, error: saveError } = await supabase.from("donations").update(values).eq("id", donationId).eq("donor_id", session.user.id).select("id").single();
@@ -611,7 +617,15 @@ export function DonationFormPage() {
           <Card padding="lg">
             <SectionHeading title="Pickup Information" description="Share the pickup location with authorized request participants." />
             <div className="donor-form-fields">
-              <TextareaField autoComplete="street-address" label="Pickup address" maxLength={500} onChange={(event) => update("pickup_address", event.target.value)} required rows={2} value={draft.pickup_address} />
+              <div className="donor-form-wide">
+                <LocationInput
+                  hint="Coordinates are optional and can be selected by clicking the map."
+                  label="Pickup location"
+                  onChange={(location) => setDraft((current) => ({ ...current, pickup_address: location.address, pickup_latitude: location.latitude, pickup_longitude: location.longitude }))}
+                  required
+                  value={{ address: draft.pickup_address, latitude: draft.pickup_latitude ?? null, longitude: draft.pickup_longitude ?? null }}
+                />
+              </div>
               <TextareaField label="Pickup instructions (optional)" maxLength={1000} onChange={(event) => update("pickup_instructions", event.target.value)} rows={2} value={draft.pickup_instructions ?? ""} />
             </div>
           </Card>

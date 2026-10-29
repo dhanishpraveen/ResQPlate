@@ -28,6 +28,7 @@ vi.mock("../lib/storage", () => ({
 }));
 
 vi.mock("./data", () => ({
+  buildPickupRequestValues: (input: unknown) => input,
   fetchAvailableDonations: vi.fn(),
   createPickupRequest: vi.fn(),
   fetchActiveNgoRequest: vi.fn(),
@@ -122,6 +123,48 @@ describe("NGO available donations screen", () => {
     expect(image).toHaveAttribute("src", "https://signed.example/food.jpg");
     fireEvent.error(image);
     expect(screen.getByRole("img", { name: "Seasonal vegetable boxes: food photo unavailable" })).toBeInTheDocument();
+    expect(fetchSignedImages).toHaveBeenCalledWith(expect.anything(), "donation-images", ["donor-1/food.jpg"]);
+  });
+
+  it("renders the signed photo on donation details", async () => {
+    vi.mocked(fetchDonation).mockResolvedValue(donation({ photo_path: "donor-1/food.jpg" }));
+    vi.mocked(fetchSignedImages).mockResolvedValue(new Map([["donor-1/food.jpg", "https://signed.example/food.jpg"]]));
+
+    render(
+      <MemoryRouter initialEntries={["/ngo/donations/donation-1"]}>
+        <Routes>
+          <Route element={<NgoDonationDetailsPage />} path="/ngo/donations/:donationId" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const image = await screen.findByRole("img", { name: "Seasonal vegetable boxes food photo" });
+    expect(image).toHaveAttribute("src", "https://signed.example/food.jpg");
+  });
+
+  it("keeps the details page usable when the photo path is missing or inaccessible", async () => {
+    vi.mocked(fetchDonation).mockResolvedValue(donation({ photo_path: null }));
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={["/ngo/donations/donation-1"]}>
+        <Routes>
+          <Route element={<NgoDonationDetailsPage />} path="/ngo/donations/:donationId" />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByLabelText("Seasonal vegetable boxes: food photo unavailable")).toBeInTheDocument();
+    unmount();
+
+    vi.mocked(fetchDonation).mockResolvedValue(donation({ photo_path: "donor-1/missing.jpg" }));
+    vi.mocked(fetchSignedImages).mockResolvedValue(new Map());
+    render(
+      <MemoryRouter initialEntries={["/ngo/donations/donation-1"]}>
+        <Routes>
+          <Route element={<NgoDonationDetailsPage />} path="/ngo/donations/:donationId" />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByLabelText("Seasonal vegetable boxes: food photo unavailable")).toBeInTheDocument();
   });
 
   it("explains when no donation rows are visible instead of implying a broken screen", async () => {

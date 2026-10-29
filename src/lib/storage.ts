@@ -14,10 +14,14 @@ export async function fetchSignedImages(
   if (error) throw error;
   const urls = new Map<string, string>();
   for (const result of data) {
-    if (!result.path || !result.signedUrl) {
-      throw new Error(result.error ?? "A private image could not be opened.");
+    if (!result.path || !result.signedUrl) continue;
+    try {
+      const url = new URL(result.signedUrl);
+      if (url.protocol !== "http:" && url.protocol !== "https:") continue;
+      urls.set(result.path, result.signedUrl);
+    } catch {
+      continue;
     }
-    urls.set(result.path, result.signedUrl);
   }
   return urls;
 }

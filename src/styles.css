@@ -6,3 +6,4 @@
 @import "./donor/donor.css";
 @import "./ngo/ngo.css";
 @import "./volunteer/volunteer.css";
+@import "./components/location-input.css";

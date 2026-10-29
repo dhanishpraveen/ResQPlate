@@ -46,6 +46,8 @@ type NgoProfile = {
   contact_phone: string | null;
   registration_certificate_path: string | null;
   ngo_proof_path: string | null;
+  organization_latitude: number | null;
+  organization_longitude: number | null;
   verification_status: "pending" | "verified" | "rejected";
   onboarding_complete: boolean;
   created_at: string;
@@ -73,6 +75,8 @@ type Donation = {
   unit: "servings" | "portions" | "kg" | "items";
   expires_at: string;
   pickup_address: string;
+  pickup_latitude: number | null;
+  pickup_longitude: number | null;
   pickup_instructions: string | null;
   photo_path: string | null;
   status: DonationStatus;
@@ -87,6 +91,9 @@ type PickupRequest = {
   requested_quantity: number;
   pickup_at: string | null;
   notes: string | null;
+  dropoff_address: string | null;
+  dropoff_latitude: number | null;
+  dropoff_longitude: number | null;
   status: RequestStatus;
   received_quantity: number | null;
   receipt_confirmed_at: string | null;
@@ -226,13 +233,13 @@ export type Database = {
       donations: Table<
         Donation,
         Pick<Donation, "donor_id" | "food_name" | "cuisine_type" | "description" | "quantity" | "unit" | "expires_at" | "pickup_address"> &
-          Partial<Pick<Donation, "pickup_instructions" | "photo_path" | "status">>,
-        Partial<Pick<Donation, "food_name" | "cuisine_type" | "description" | "quantity" | "unit" | "expires_at" | "pickup_address" | "pickup_instructions" | "photo_path" | "status">>
+          Partial<Pick<Donation, "pickup_latitude" | "pickup_longitude" | "pickup_instructions" | "photo_path" | "status">>,
+        Partial<Pick<Donation, "food_name" | "cuisine_type" | "description" | "quantity" | "unit" | "expires_at" | "pickup_address" | "pickup_latitude" | "pickup_longitude" | "pickup_instructions" | "photo_path" | "status">>
       >;
       pickup_requests: Table<
         PickupRequest,
         Pick<PickupRequest, "donation_id" | "ngo_id" | "requested_quantity"> &
-          Partial<Pick<PickupRequest, "pickup_at" | "notes">>,
+          Partial<Pick<PickupRequest, "pickup_at" | "notes" | "dropoff_address" | "dropoff_latitude" | "dropoff_longitude">>,
         never
       >;
       donation_status_history: Table<

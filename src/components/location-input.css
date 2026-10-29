@@ -1,0 +1,62 @@
+.location-input {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.location-input-address {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.location-input-address .ui-field {
+  min-width: 0;
+}
+
+.location-input-address > .ui-button {
+  width: 12.5rem;
+  min-height: 2.75rem;
+}
+
+.location-input-hint {
+  grid-column: 1;
+  margin: calc(var(--space-2) * -1) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+}
+
+.location-map {
+  overflow: hidden;
+  min-height: 16rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.location-map-canvas {
+  min-height: 16rem;
+  width: 100%;
+}
+
+.location-input-coordinates {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+}
+
+@media (max-width: 640px) {
+  .location-input-address {
+    grid-template-columns: 1fr;
+  }
+
+  .location-input-address .ui-button {
+    width: 100%;
+  }
+
+  .location-input-hint {
+    grid-column: 1;
+  }
+}

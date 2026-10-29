@@ -17,6 +17,7 @@ import {
   Utensils,
 } from "lucide-react";
 import { AppShell, PageHeader } from "../components/layout";
+import { LocationInput } from "../components/location-input";
 import {
   Button,
   Card,
@@ -33,11 +34,11 @@ import {
 } from "../components/ui";
 import { useAuth } from "../auth/AuthContext";
 import { supabase, supabaseConfigurationError } from "../lib/supabase";
-import type { Database } from "../lib/database.types";
 import { fetchSignedImages } from "../lib/storage";
 import {
   createNgoDocumentUrl,
   createPickupRequest,
+  buildPickupRequestValues,
   fetchActiveNgoRequest,
   fetchAvailableDonations,
   fetchDonation,
@@ -483,6 +484,7 @@ export function RequestPickupPage() {
   const [loading, setLoading] = useState(true);
   const [pickupAt, setPickupAt] = useState("");
   const [notes, setNotes] = useState("");
+  const [dropoff, setDropoff] = useState({ address: "", latitude: null as number | null, longitude: null as number | null });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [hasActiveRequest, setHasActiveRequest] = useState(false);
@@ -529,13 +531,16 @@ export function RequestPickupPage() {
         setHasActiveRequest(true);
         return;
       }
-      const requestValues: Database["public"]["Tables"]["pickup_requests"]["Insert"] = {
+      const requestValues = buildPickupRequestValues({
         donation_id: donation.id,
         ngo_id: session.user.id,
         requested_quantity: donation.quantity,
         pickup_at: new Date(pickupAt).toISOString(),
         notes: notes.trim() || null,
-      };
+        dropoff_address: dropoff.address.trim() || null,
+        dropoff_latitude: dropoff.latitude,
+        dropoff_longitude: dropoff.longitude,
+      });
       const data = await createPickupRequest(supabase, requestValues);
       navigate(`/ngo/requests/${data.id}/submitted`, { state: { requestId: data.id } });
     } catch (cause) {
@@ -568,6 +573,12 @@ export function RequestPickupPage() {
               required
               type="datetime-local"
               value={pickupAt}
+            />
+            <LocationInput
+              hint="Optional: use your organization address or select the drop-off point on the map."
+              label="NGO drop-off location"
+              onChange={setDropoff}
+              value={dropoff}
             />
             <TextareaField label="Additional notes (optional)" maxLength={1000} onChange={(event) => setNotes(event.target.value)} rows={4} value={notes} />
             <div className="ngo-form-actions">
