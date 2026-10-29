@@ -37,6 +37,8 @@ import type { Database } from "../lib/database.types";
 import { fetchSignedImages } from "../lib/storage";
 import {
   createNgoDocumentUrl,
+  createPickupRequest,
+  fetchActiveNgoRequest,
   fetchAvailableDonations,
   fetchDonation,
   fetchHandover,
@@ -70,7 +72,30 @@ type LoadState<T> =
 type NgoDonationView = NgoDonation & { photoUrl: string | null };
 
 function messageOf(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string") {
+    return error.message;
+  }
+  return String(error);
+}
+
+function pickupRequestFailure(error: unknown) {
+  if (typeof error === "object" && error !== null && "code" in error && typeof error.code === "string") {
+    const message = "message" in error && typeof error.message === "string" ? error.message : "";
+    if (error.code === "23505" && message.includes("pickup_requests_one_active_per_ngo")) {
+      return {
+        message: "Your organization already has an active request for this donation.",
+        hasActiveRequest: true,
+      };
+    }
+    if (error.code === "P0001") {
+      return {
+        message: "The request was not accepted. The donation may no longer be available or the request may not match the current eligibility requirements. Refresh the listings and try again.",
+        hasActiveRequest: false,
+      };
+    }
+  }
+  return { message: messageOf(error), hasActiveRequest: false };
 }
 
 function dateLabel(value: string | null) {
@@ -391,7 +416,7 @@ function DonationDetailsContent({ donation, action }: { donation: NgoDonationVie
           <div><Utensils size={17} /><span><small>Available quantity</small><strong>{formatQuantity(donation.quantity, donation.unit)}</strong></span></div>
           <div><Clock3 size={17} /><span><small>Available until</small><strong>{dateLabel(donation.expires_at)}</strong></span></div>
         </div>
-        <InlineAlert tone="info">Donor contact details and pickup instructions are not shown before an accepted request.</InlineAlert>
+        <InlineAlert tone="info">An NGO account can request an available donation. Donor contact details and pickup instructions are not shown before an accepted request.</InlineAlert>
         {action}
       </Card>
       <Card padding="lg">
@@ -458,11 +483,13 @@ export function RequestPickupPage() {
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [hasActiveRequest, setHasActiveRequest] = useState(false);
 
   useEffect(() => {
     let active = true;
     async function load() {
       if (!supabase) { setError(supabaseConfigurationError); setLoading(false); return; }
+      if (!session) { setError("Sign in again before requesting a pickup."); setLoading(false); return; }
       try {
         const result = await fetchDonation(supabase, donationId);
         if (!active) return;
@@ -482,7 +509,7 @@ export function RequestPickupPage() {
     }
     void load();
     return () => { active = false; };
-  }, [donationId]);
+  }, [donationId, session]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -492,7 +519,14 @@ export function RequestPickupPage() {
     if (validationError) { setError(validationError); return; }
     setBusy(true);
     setError(null);
+    setHasActiveRequest(false);
     try {
+      const activeRequest = await fetchActiveNgoRequest(supabase, session.user.id, donation.id);
+      if (activeRequest) {
+        setError("Your organization already has an active request for this donation.");
+        setHasActiveRequest(true);
+        return;
+      }
       const requestValues: Database["public"]["Tables"]["pickup_requests"]["Insert"] = {
         donation_id: donation.id,
         ngo_id: session.user.id,
@@ -500,15 +534,12 @@ export function RequestPickupPage() {
         pickup_at: new Date(pickupAt).toISOString(),
         notes: notes.trim() || null,
       };
-      const { data, error: requestError } = await supabase
-        .from("pickup_requests")
-        .insert(requestValues)
-        .select("id")
-        .single();
-      if (requestError) throw requestError;
+      const data = await createPickupRequest(supabase, requestValues);
       navigate(`/ngo/requests/${data.id}/submitted`, { state: { requestId: data.id } });
     } catch (cause) {
-      setError(messageOf(cause));
+      const failure = pickupRequestFailure(cause);
+      setError(failure.message);
+      setHasActiveRequest(failure.hasActiveRequest);
     } finally {
       setBusy(false);
     }
@@ -520,7 +551,12 @@ export function RequestPickupPage() {
       {error && !donation ? <ErrorState description={error} /> : donation && (
         <form className="ngo-request-form-layout" onSubmit={(event) => void submit(event)}>
           <Card className="ngo-form-card" padding="lg">
-            {error && <InlineAlert tone="danger">{error}</InlineAlert>}
+            {error && (
+              <InlineAlert tone="danger">
+                {error}
+                {hasActiveRequest && <> <Link to="/ngo/requests">Review your requests</Link>.</>}
+              </InlineAlert>
+            )}
             <SectionHeading description="The current workflow requests the full donation quantity." title="Pickup details" />
             <div className="ngo-selected-donation"><FoodPhoto name={donation.food_name} src={donation.photoUrl} /><span><strong>{donation.food_name}</strong><small>{donation.cuisine_type} · {formatQuantity(donation.quantity, donation.unit)}</small></span></div>
             <TextField
@@ -542,7 +578,7 @@ export function RequestPickupPage() {
             <div className="ngo-summary-row"><span>Food</span><strong>{donation.food_name}</strong></div>
             <div className="ngo-summary-row"><span>Requested quantity</span><strong>{formatQuantity(donation.quantity, donation.unit)}</strong></div>
             <div className="ngo-summary-row"><span>Request status</span><StatusBadge tone="warning">Pending donor approval</StatusBadge></div>
-            <InlineAlert tone="info">A verified NGO is required. The database enforces full-quantity requests and prevents duplicate active requests.</InlineAlert>
+            <InlineAlert tone="info">The database checks NGO ownership, donation availability, full-quantity requests, and duplicate active requests.</InlineAlert>
           </Card>
         </form>
       )}
@@ -942,7 +978,7 @@ export function NgoProfilePage() {
     { label: "Organization proof", path: profile.ngo_proof_path },
   ] : [];
   return (
-    <NgoShell activeLabel="Profile" title="Organization Profile" description="Review your organization details, verification documents, and approval status.">
+    <NgoShell activeLabel="Profile" title="Organization Profile" description="Review your organization details and any optional legacy files.">
       <div className="ngo-page-stack">
         {error && <ErrorState description={error} onRetry={() => void reload()} />}
         {loading ? <LoadingState label="Loading organization profile" /> : profile && <>
@@ -973,7 +1009,7 @@ export function NgoProfilePage() {
                 {document.path && <Button disabled={openingDocument} onClick={() => void openDocument(document.path ?? "")} size="sm" variant="outline">Open securely</Button>}
               </div>
             ))}
-            {documentUrl && <a className="ngo-document-link" href={documentUrl} rel="noreferrer" target="_blank">Open private verification document</a>}
+            {documentUrl && <a className="ngo-document-link" href={documentUrl} rel="noreferrer" target="_blank">Open private legacy document</a>}
           </Card></div>
         </>}
       </div>
@@ -1000,7 +1036,7 @@ export function NgoSettingsPage() {
         </Card>
         <Card padding="lg">
           <SectionHeading title="Privacy" />
-          <p className="ngo-settings-copy">Organization documents are stored in the private verification bucket and opened only through short-lived signed links.</p>
+          <p className="ngo-settings-copy">Any previously uploaded organization files remain private and are opened only through short-lived signed links.</p>
         </Card>
         <Card padding="lg">
           <SectionHeading title="Account Management" />

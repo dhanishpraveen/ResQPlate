@@ -286,8 +286,9 @@ already complete.
   `confirm_ngo_receipt` RPC. Queries request only fields needed by the screen;
   donor names, addresses, contact fields, and evidence paths are not fetched
   for pre-approval views.
-- Read-only inspection of production policies confirmed that NGOs can read
-  their own requests and insert a full-quantity request only when verified.
+- The initial production inspection found that NGOs could read their own
+  requests and insert a full-quantity request only when verified; the later
+  migration below removes that verification gate.
   The only `donations` SELECT policy is donor-owned; there is no NGO SELECT
   policy for available listings. RLS therefore hides donation rows from NGOs,
   so discovery, details, and request creation could not initially be
@@ -299,10 +300,10 @@ already complete.
   production logs confirmed an authenticated caller was rejected by the
   function's verification check (`42501`), approved migration
   `allow_pending_ngo_listing_browse` changed that check to require an
-  authenticated NGO role but not verification. The RPC still only returns
-  unexpired `available` rows; pickup request submission remains restricted to
-  verified NGOs by the existing `can_submit_pickup_request` function. The
-  frontend uses the RPC and provides manual refresh controls. Authenticated
+  authenticated NGO role but not verification. The RPC returns only unexpired
+  `available` rows; request submission was subsequently updated to allow NGO
+  profiles without requiring verification. The frontend uses the RPC and
+  provides manual refresh controls. Authenticated
   execution remains granted; anonymous execution remains denied.
   Production log review confirmed the earlier 403s occurred before the new
   migration was applied. A read-only smoke test under the authenticated
@@ -360,12 +361,12 @@ already complete.
   auth-trigger/`assign_initial_role` flow. No schema, policy, bucket, or
   production data was changed.
 - No live schema/RLS blocker prevents saving required NGO fields to the
-  existing profile row. The separately approved donation-list RPC allows only
-  verified NGOs to discover available, unexpired listings;
-  `can_submit_pickup_request` likewise requires
-  `verification_status = 'verified'`. Direct dashboard route access works for
-  NGOs regardless of verification, but only verified organizations can browse
-  and request listings.
+  existing profile row. The separately approved donation-list RPC allows NGO
+  role accounts to discover available, unexpired listings;
+  the later approved `ngo_verification_optional` migration removed
+  verification-status gates from browsing, requesting, and receipt
+  confirmation. Direct dashboard access, browsing, and requests require an NGO
+  role and profile, but not verification approval.
 - Automated tests cover the two-step registration, no Storage calls, update
   errors/zero-row retries, NGO role metadata, direct dashboard navigation and
   route access after a simulated refresh. Live authenticated signup and profile
@@ -373,6 +374,37 @@ already complete.
   and pending screens are intentionally superseded by this requested two-step
   flow; visual comparison was not completed because the browser PDF viewer
   did not render the page. The repository has no configured lint script.
+
+### NGO verification is optional
+
+- Production inspection confirmed that the NGO request form's
+  `.insert(...).select("id").single()` is a single INSERT returning its ID.
+  The deployed request function, RLS policy, grants, table constraints,
+  active-request index, and trigger were inspected before changing access.
+- The previous request failure was SQLSTATE `P0001`: the
+  `can_submit_pickup_request` function required
+  `verification_status = 'verified'`; the NGO profile was `pending`. The
+  request insert policy delegates to that function.
+- After explicit approval, migration
+  `ngo_verification_optional` replaced request eligibility, donation-listing,
+  trigger, and receipt-confirmation function bodies. These now require an
+  authenticated NGO role and an existing NGO profile where applicable, but
+  do not require verification. Existing availability, expiry, full-quantity,
+  request-ownership, donor-side, handover, and duplicate protections remain.
+  RLS policies and grants were not changed.
+- The request UI no longer reads or gates on verification status. It preserves
+  the existing active-request precheck and database-enforced duplicate
+  handling. Donor listing copy no longer implies NGO approval is required.
+- A read-only production smoke test under an existing NGO claim returned nine
+  available, unexpired listings and marked all nine request-eligible. A
+  separate donor-role claim was rejected by the request eligibility function.
+  These tested function behavior without inserting or changing production
+  requests.
+- Automated coverage checks requests with verification status ignored,
+  duplicate requests, and database rejection messaging. The browser has no
+  authenticated NGO test session, so signup/login and a real persisted
+  production request remain unverified. No onboarding document requirement
+  was added.
 
 ### Missing Auth application-profile recovery
 

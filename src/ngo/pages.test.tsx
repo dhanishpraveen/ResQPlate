@@ -1,10 +1,17 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
-import { AvailableDonationsPage, NgoDashboardPage } from "./pages";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { AvailableDonationsPage, NgoDashboardPage, NgoDonationDetailsPage, RequestPickupPage } from "./pages";
 import type { NgoDonation } from "./data";
 import { useAuth } from "../auth/AuthContext";
-import { fetchAvailableDonations, fetchNgoRequests } from "./data";
+import {
+  createPickupRequest,
+  fetchActiveNgoRequest,
+  fetchAvailableDonations,
+  fetchDonation,
+  fetchNgoProfile,
+  fetchNgoRequests,
+} from "./data";
 import { fetchSignedImages } from "../lib/storage";
 
 vi.mock("../auth/AuthContext", () => ({
@@ -22,6 +29,8 @@ vi.mock("../lib/storage", () => ({
 
 vi.mock("./data", () => ({
   fetchAvailableDonations: vi.fn(),
+  createPickupRequest: vi.fn(),
+  fetchActiveNgoRequest: vi.fn(),
   fetchDonation: vi.fn(),
   fetchHandover: vi.fn(),
   fetchNgoProfile: vi.fn(),
@@ -47,10 +56,25 @@ const donation = (overrides: Partial<NgoDonation> = {}): NgoDonation => ({
   ...overrides,
 });
 
+function renderRequestPickup() {
+  return render(
+    <MemoryRouter initialEntries={["/ngo/donations/donation-1/request"]}>
+      <Routes>
+        <Route element={<RequestPickupPage />} path="/ngo/donations/:donationId/request" />
+        <Route element={<p>Request submitted</p>} path="/ngo/requests/:requestId/submitted" />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("NGO available donations screen", () => {
   beforeEach(() => {
     vi.mocked(fetchAvailableDonations).mockReset();
     vi.mocked(fetchNgoRequests).mockReset().mockResolvedValue([]);
+    vi.mocked(fetchDonation).mockReset().mockResolvedValue(donation());
+    vi.mocked(fetchNgoProfile).mockReset();
+    vi.mocked(fetchActiveNgoRequest).mockReset().mockResolvedValue(null);
+    vi.mocked(createPickupRequest).mockReset();
     vi.mocked(fetchSignedImages).mockReset().mockResolvedValue(new Map());
     vi.mocked(useAuth).mockReturnValue({
       session: {
@@ -139,12 +163,105 @@ describe("NGO available donations screen", () => {
 
   it("shows RPC authorization failures instead of presenting them as an empty listing", async () => {
     vi.mocked(fetchAvailableDonations).mockRejectedValueOnce(
-      new Error("A verified NGO account is required to browse available donations"),
+      new Error("An authenticated NGO profile is required to browse available donations"),
     );
 
     render(<MemoryRouter><AvailableDonationsPage /></MemoryRouter>);
 
-    expect(await screen.findByText("A verified NGO account is required to browse available donations")).toBeInTheDocument();
+    expect(await screen.findByText("An authenticated NGO profile is required to browse available donations")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "No visible donations" })).not.toBeInTheDocument();
+  });
+
+  it("shows the Request action on an available donation detail", async () => {
+    render(
+      <MemoryRouter initialEntries={["/ngo/donations/donation-1"]}>
+        <Routes>
+          <Route element={<NgoDonationDetailsPage />} path="/ngo/donations/:donationId" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("link", { name: "Request pickup" })).toHaveAttribute(
+      "href",
+      "/ngo/donations/donation-1/request",
+    );
+  });
+
+  it("allows an NGO to request a donation without checking verification status", async () => {
+    vi.mocked(fetchNgoProfile).mockImplementation(() => {
+      throw new Error("Request flow must not load or require verification status.");
+    });
+    vi.mocked(createPickupRequest).mockResolvedValue({ id: "request-1" });
+    renderRequestPickup();
+
+    const pickupTime = new Date(Date.now() + 60 * 60 * 1000);
+    pickupTime.setMinutes(pickupTime.getMinutes() - pickupTime.getTimezoneOffset());
+    fireEvent.change(await screen.findByLabelText(/Preferred pickup date and time/), {
+      target: { value: pickupTime.toISOString().slice(0, 16) },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Submit pickup request" }));
+
+    expect(await screen.findByText("Request submitted")).toBeInTheDocument();
+    expect(fetchNgoProfile).not.toHaveBeenCalled();
+    expect(fetchActiveNgoRequest).toHaveBeenCalledWith(expect.anything(), "ngo-1", "donation-1");
+    expect(createPickupRequest).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      donation_id: "donation-1",
+      ngo_id: "ngo-1",
+      requested_quantity: 24,
+      notes: null,
+    }));
+  });
+
+  it("routes an existing active request to the request list instead of inserting a duplicate", async () => {
+    vi.mocked(fetchActiveNgoRequest).mockResolvedValue({ id: "request-existing" });
+    renderRequestPickup();
+
+    const pickupTime = new Date(Date.now() + 60 * 60 * 1000);
+    pickupTime.setMinutes(pickupTime.getMinutes() - pickupTime.getTimezoneOffset());
+    fireEvent.change(await screen.findByLabelText(/Preferred pickup date and time/), {
+      target: { value: pickupTime.toISOString().slice(0, 16) },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Submit pickup request" }));
+
+    await waitFor(() => expect(fetchActiveNgoRequest).toHaveBeenCalledWith(expect.anything(), "ngo-1", "donation-1"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your organization already has an active request for this donation.");
+    expect(screen.getByRole("link", { name: "Review your requests" })).toHaveAttribute("href", "/ngo/requests");
+    expect(createPickupRequest).not.toHaveBeenCalled();
+  });
+
+  it("handles a concurrent duplicate request using the database unique constraint", async () => {
+    vi.mocked(createPickupRequest).mockRejectedValue({
+      code: "23505",
+      message: "duplicate key value violates unique constraint \"pickup_requests_one_active_per_ngo\"",
+    });
+    renderRequestPickup();
+
+    const pickupTime = new Date(Date.now() + 60 * 60 * 1000);
+    pickupTime.setMinutes(pickupTime.getMinutes() - pickupTime.getTimezoneOffset());
+    fireEvent.change(await screen.findByLabelText(/Preferred pickup date and time/), {
+      target: { value: pickupTime.toISOString().slice(0, 16) },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Submit pickup request" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your organization already has an active request for this donation.");
+    expect(screen.getByRole("link", { name: "Review your requests" })).toHaveAttribute("href", "/ngo/requests");
+  });
+
+  it("explains the database eligibility rejection without implying an active request", async () => {
+    vi.mocked(createPickupRequest).mockRejectedValue({
+      code: "P0001",
+      message: "An NGO must request the full quantity of an available donation",
+    });
+    renderRequestPickup();
+
+    const pickupTime = new Date(Date.now() + 60 * 60 * 1000);
+    pickupTime.setMinutes(pickupTime.getMinutes() - pickupTime.getTimezoneOffset());
+    fireEvent.change(await screen.findByLabelText(/Preferred pickup date and time/), {
+      target: { value: pickupTime.toISOString().slice(0, 16) },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Submit pickup request" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/donation may no longer be available/i);
+    expect(screen.queryByRole("link", { name: "Review your requests" })).not.toBeInTheDocument();
   });
 });

@@ -29,12 +29,11 @@ The browser uses `VITE_SUPABASE_URL` and
 grant privileged access. A service-role key or database credential must never
 be added to frontend code or a `VITE_` variable. The auth context loads the
 authenticated session and the corresponding profile; route guards distinguish
-signed-out, role-selection, profile-completion, role-onboarding, and
-verification-pending states.
+signed-out, role-selection, profile-completion, and role-onboarding states.
 
 Implemented auth routes include sign-in, sign-up, confirmation-email pending,
 password reset/update, auth callback, role selection, shared profile
-completion, donor onboarding, and NGO onboarding/pending verification. Role
+completion, donor onboarding, and NGO organization/contact onboarding. Role
 selection is only a request to assign an initial role: the draft
 `assign_initial_role` RPC accepts it once when the account role is unset. A
 client-selected role is not a trusted authorization check.
@@ -64,8 +63,9 @@ The draft database contract is designed around:
   listed quantity. Donor handover and the later NGO receipt quantity must
   match that full amount. Partial fulfillment/discrepancy handling is not
   implemented.
-- `confirm_ngo_receipt` is a backend integration boundary for a future
-  verified-NGO workflow. There is no NGO receipt interface in this phase.
+- `confirm_ngo_receipt` is a backend integration boundary for the NGO receipt
+  workflow. NGO role and request ownership are required; verification approval
+  is not required.
   Delivery assignment/volunteer collection is also outside the implemented
   workflow.
 

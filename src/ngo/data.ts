@@ -53,6 +53,31 @@ export async function fetchNgoRequest(client: Client, ngoId: string, requestId: 
   return data;
 }
 
+export async function fetchActiveNgoRequest(client: Client, ngoId: string, donationId: string) {
+  const { data, error } = await client
+    .from("pickup_requests")
+    .select("id")
+    .eq("ngo_id", ngoId)
+    .eq("donation_id", donationId)
+    .in("status", ["pending", "confirmed", "picked_up"])
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function createPickupRequest(
+  client: Client,
+  requestValues: Database["public"]["Tables"]["pickup_requests"]["Insert"],
+) {
+  const { data, error } = await client
+    .from("pickup_requests")
+    .insert(requestValues)
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export async function fetchDonation(client: Client, donationId: string) {
   const { data, error } = await client
     .rpc("list_available_donations", { p_donation_id: donationId })
@@ -96,6 +121,6 @@ export async function createNgoDocumentUrl(client: Client, path: string) {
     .from("ngo-verification")
     .createSignedUrl(path, 60);
   if (error) throw error;
-  if (!data.signedUrl) throw new Error("The private verification document could not be opened.");
+  if (!data.signedUrl) throw new Error("The private legacy document could not be opened.");
   return data.signedUrl;
 }

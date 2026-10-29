@@ -457,7 +457,7 @@ export function DonationFormPage() {
           </Card>
           <Card padding="md">
             <Status status={status} />
-            <p className="donor-aside-note">Published listings become visible to verified NGOs who can submit pickup requests.</p>
+            <p className="donor-aside-note">Published listings become visible to eligible NGO accounts that can submit pickup requests.</p>
           </Card>
         </aside>
       </div>
@@ -686,7 +686,7 @@ export function PickupRequestsPage() {
         ))}
       </div>
       {loading ? <LoadingState label="Loading pickup requests" /> : error ? <ErrorState description={error} onRetry={() => void reload()} /> : requests.length === 0
-        ? <Card padding="sm"><EmptyState description={filter === "all" ? "Requests from verified organizations will appear here." : `There are no ${filter.replace("_", " ")} requests.`} title="No pickup requests" /></Card>
+        ? <Card padding="sm"><EmptyState description={filter === "all" ? "Requests from eligible NGO accounts will appear here." : `There are no ${filter.replace("_", " ")} requests.`} title="No pickup requests" /></Card>
         : <div className="donor-request-list">{requests.map((request) => {
           const donation = donationById.get(request.donation_id);
           return (
