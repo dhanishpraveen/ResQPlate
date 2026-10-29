@@ -61,6 +61,7 @@ type VolunteerProfile = {
 
 type DonationStatus = "draft" | "available" | "claimed" | "picked_up" | "completed" | "cancelled";
 type RequestStatus = "pending" | "confirmed" | "declined" | "picked_up" | "completed" | "cancelled";
+type DeliveryVerificationStatus = "pending" | "verified" | "issue_reported";
 
 type Donation = {
   id: string;
@@ -90,8 +91,37 @@ type PickupRequest = {
   received_quantity: number | null;
   receipt_confirmed_at: string | null;
   receipt_confirmed_by: string | null;
+  volunteer_id: string | null;
+  volunteer_picked_up_at: string | null;
+  volunteer_delivered_at: string | null;
+  delivery_verification_status: DeliveryVerificationStatus;
+  delivery_verified_at: string | null;
+  delivery_verified_by: string | null;
+  delivery_issue_reason: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type VolunteerTask = {
+  request_id: string;
+  donation_id: string;
+  food_name: string;
+  description: string;
+  quantity: number;
+  unit: Donation["unit"];
+  pickup_at: string | null;
+  expires_at: string;
+  status: RequestStatus;
+  donor_name: string | null;
+  donor_phone: string | null;
+  pickup_address: string | null;
+  pickup_instructions: string | null;
+  ngo_name: string | null;
+  ngo_address: string | null;
+  ngo_contact_name: string | null;
+  ngo_contact_phone: string | null;
+  volunteer_picked_up_at: string | null;
+  volunteer_delivered_at: string | null;
 };
 
 export type Database = {
@@ -197,6 +227,10 @@ export type Database = {
         Args: { p_request_id: string; p_received_quantity: number };
         Returns: undefined;
       };
+      report_ngo_delivery_issue: {
+        Args: { p_request_id: string; p_reason: string };
+        Returns: undefined;
+      };
       can_submit_pickup_request: {
         Args: { p_donation_id: string; p_quantity: number };
         Returns: boolean;
@@ -207,6 +241,22 @@ export type Database = {
           Donation,
           "id" | "food_name" | "cuisine_type" | "description" | "quantity" | "unit" | "expires_at" | "status" | "created_at" | "photo_path"
         >>;
+      };
+      list_volunteer_tasks: {
+        Args: Record<PropertyKey, never>;
+        Returns: VolunteerTask[];
+      };
+      claim_volunteer_task: {
+        Args: { p_request_id: string };
+        Returns: undefined;
+      };
+      volunteer_confirm_pickup: {
+        Args: { p_request_id: string; p_note?: string | null };
+        Returns: undefined;
+      };
+      volunteer_confirm_delivery: {
+        Args: { p_request_id: string };
+        Returns: undefined;
       };
     };
     Enums: Record<string, never>;

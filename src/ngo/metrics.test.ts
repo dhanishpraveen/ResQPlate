@@ -19,6 +19,12 @@ function request(id: string, status: NgoRequest["status"]): NgoRequest {
     status,
     received_quantity: status === "completed" ? 12 : null,
     receipt_confirmed_at: null,
+    volunteer_id: null,
+    volunteer_picked_up_at: null,
+    volunteer_delivered_at: null,
+    delivery_verification_status: status === "completed" ? "verified" : "pending",
+    delivery_verified_at: status === "completed" ? "2026-10-29T11:00:00.000Z" : null,
+    delivery_issue_reason: null,
     created_at: "2026-10-29T10:00:00.000Z",
     updated_at: "2026-10-29T10:00:00.000Z",
   };

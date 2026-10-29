@@ -5,7 +5,6 @@ import {
   ChooseRolePage,
   DonorOnboardingPage,
   EmailSentPage,
-  FuturePhasePage,
   LogoutPage,
   NgoOnboardingPage,
   ProfileOnboardingPage,
@@ -40,6 +39,13 @@ import {
 } from "./ngo/pages";
 import { AppShell, PageHeader } from "./components/layout";
 import { Card } from "./components/ui";
+import {
+  VolunteerAvailableTasksPage,
+  VolunteerDashboardPage,
+  VolunteerMyTasksPage,
+  VolunteerTaskDetailsPage,
+  VolunteerUnavailablePage,
+} from "./volunteer/pages";
 
 function DonorPlaceholderPage({ label }: { label: string }) {
   return (
@@ -96,6 +102,7 @@ export function App() {
             <Route element={<RequestSubmittedPage />} path="/ngo/requests/:requestId/submitted" />
             <Route element={<NgoDeliveryDetailsPage />} path="/ngo/requests/:requestId" />
             <Route element={<NgoDeliveriesPage />} path="/ngo/deliveries" />
+            <Route element={<NgoDeliveriesPage />} path="/ngo/verification" />
             <Route element={<NgoDeliveryDetailsPage />} path="/ngo/deliveries/:requestId" />
             <Route element={<ConfirmNgoReceiptPage />} path="/ngo/deliveries/:requestId/receipt" />
             <Route element={<ReceiptConfirmedPage />} path="/ngo/deliveries/:requestId/receipt/confirmed" />
@@ -106,7 +113,17 @@ export function App() {
             <Route element={<NgoSettingsPage />} path="/ngo/settings" />
           </Route>
           <Route element={<RequireAccount role="volunteer" />}>
-            <Route element={<FuturePhasePage role="volunteer" />} path="/volunteer" />
+            <Route element={<VolunteerDashboardPage />} path="/volunteer" />
+            <Route element={<VolunteerAvailableTasksPage />} path="/volunteer/tasks/available" />
+            <Route element={<VolunteerMyTasksPage />} path="/volunteer/tasks" />
+            <Route element={<VolunteerTaskDetailsPage />} path="/volunteer/tasks/:requestId" />
+            <Route element={<VolunteerUnavailablePage feature="Earnings" />} path="/volunteer/earnings" />
+            <Route element={<VolunteerUnavailablePage feature="Impact" />} path="/volunteer/impact" />
+            <Route element={<VolunteerUnavailablePage feature="Messages" />} path="/volunteer/messages" />
+            <Route element={<VolunteerUnavailablePage feature="Notifications" />} path="/volunteer/notifications" />
+            <Route element={<VolunteerUnavailablePage feature="Profile" />} path="/volunteer/profile" />
+            <Route element={<VolunteerUnavailablePage feature="Availability" />} path="/volunteer/availability" />
+            <Route element={<VolunteerUnavailablePage feature="Settings" />} path="/volunteer/settings" />
           </Route>
         </Route>
 

@@ -13,6 +13,7 @@ import {
   Warehouse,
   Bike,
   CalendarDays,
+  ShieldCheck,
 } from "lucide-react";
 
 export type UserRole = "donor" | "ngo" | "volunteer";
@@ -41,6 +42,7 @@ export const roleNavigation: Record<UserRole, NavigationItem[]> = {
     { label: "Available Donations", href: "/ngo/donations", icon: Warehouse },
     { label: "My Requests", href: "/ngo/requests", icon: ClipboardList },
     { label: "My Deliveries", href: "/ngo/deliveries", icon: Bike },
+    { label: "Delivery Verification", href: "/ngo/verification", icon: ShieldCheck },
     { label: "Impact", href: "/ngo/impact", icon: Heart },
     { label: "Messages", href: "/ngo/messages", icon: MessageCircle },
     { label: "Notifications", href: "/ngo/notifications", icon: Bell },

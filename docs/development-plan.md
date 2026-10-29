@@ -444,6 +444,43 @@ already complete.
 - **Gate:** assignment, availability, reimbursement/payment, and failed-task
   behavior are approved.
 
+### Phase 5 implementation status
+
+- Applied the approved `volunteer_task_workflow` migration. It adds
+  volunteer assignment and pickup/delivery timestamps to `pickup_requests`,
+  plus volunteer-only RPCs for task listing, first-volunteer claim, pickup
+  confirmation, and delivery confirmation. Functions use an empty
+  `search_path`, validate the authenticated volunteer role and completed
+  volunteer profile, and preserve existing RLS boundaries.
+- Added volunteer dashboard, available-task, my-task, task-detail, claim,
+  pickup, and delivery routes. Unassigned tasks expose only high-level food
+  details; donor/NGO locations and contact details are returned by the RPC
+  only after assignment. NGO delivery tracking now shows assignment and
+  volunteer pickup/delivery progress.
+- Volunteer onboarding remains the existing shared name/phone profile flow;
+  no verification or document upload requirement was introduced. Earnings,
+  impact, messaging, notifications, profile, availability, and settings
+  remain explicit unavailable states because no approved backend capability
+  exists for them.
+- Added volunteer data-helper regression tests. `npm run typecheck`,
+  `npm test -- --runInBand`, `npm run build`, and `git diff --check` pass.
+  Authenticated browser testing of concurrent claims and the complete
+  donor-confirmation-to-NGO-receipt journey remains pending.
+
+### NGO delivery verification milestone
+
+- Applied `ngo_delivery_verification`, adding server-enforced
+  `pending`/`verified`/`issue_reported` delivery review state, verifier
+  identity/time, and a bounded issue reason to `pickup_requests`.
+- `confirm_ngo_receipt` now requires a pending review and records the
+  verification atomically. `report_ngo_delivery_issue` is restricted to the
+  owning NGO, requires a reason, prevents repeated review, and preserves the
+  delivery for follow-up instead of falsely marking it completed.
+- Added the NGO Delivery Verification navigation section, filters, receipt
+  confirmation guard, issue-report form, and persisted review indicators.
+  Donor and volunteer private contact details remain unavailable in the NGO
+  view because no approved cross-role contact projection exists.
+
 ## Phase 6: Shared functionality
 
 - **Objectives:** messaging, notifications, shared profile patterns, settings,

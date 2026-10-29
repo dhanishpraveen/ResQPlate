@@ -16,7 +16,8 @@ export type NgoRequest = Pick<
   RequestRow,
   "id" | "donation_id" | "ngo_id" | "requested_quantity" | "pickup_at" | "notes" | "status" |
   "received_quantity" | "receipt_confirmed_at" | "created_at" | "updated_at"
->;
+> & Pick<RequestRow, "volunteer_id" | "volunteer_picked_up_at" | "volunteer_delivered_at" |
+  "delivery_verification_status" | "delivery_verified_at" | "delivery_issue_reason">;
 export type NgoRequestHistory = Pick<RequestHistoryRow, "status" | "changed_at">;
 export type NgoHandover = Pick<HandoverRow, "recorded_at">;
 export type NgoProfile = Pick<
@@ -35,7 +36,7 @@ export async function fetchAvailableDonations(client: Client) {
 export async function fetchNgoRequests(client: Client, ngoId: string) {
   const { data, error } = await client
     .from("pickup_requests")
-    .select("id, donation_id, ngo_id, requested_quantity, pickup_at, notes, status, received_quantity, receipt_confirmed_at, created_at, updated_at")
+    .select("id, donation_id, ngo_id, requested_quantity, pickup_at, notes, status, received_quantity, receipt_confirmed_at, volunteer_id, volunteer_picked_up_at, volunteer_delivered_at, delivery_verification_status, delivery_verified_at, delivery_issue_reason, created_at, updated_at")
     .eq("ngo_id", ngoId)
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -45,12 +46,20 @@ export async function fetchNgoRequests(client: Client, ngoId: string) {
 export async function fetchNgoRequest(client: Client, ngoId: string, requestId: string) {
   const { data, error } = await client
     .from("pickup_requests")
-    .select("id, donation_id, ngo_id, requested_quantity, pickup_at, notes, status, received_quantity, receipt_confirmed_at, created_at, updated_at")
+    .select("id, donation_id, ngo_id, requested_quantity, pickup_at, notes, status, received_quantity, receipt_confirmed_at, volunteer_id, volunteer_picked_up_at, volunteer_delivered_at, delivery_verification_status, delivery_verified_at, delivery_issue_reason, created_at, updated_at")
     .eq("ngo_id", ngoId)
     .eq("id", requestId)
     .maybeSingle();
   if (error) throw error;
   return data;
+}
+
+export async function reportNgoDeliveryIssue(client: Client, requestId: string, reason: string) {
+  const { error } = await client.rpc("report_ngo_delivery_issue", {
+    p_request_id: requestId,
+    p_reason: reason,
+  });
+  if (error) throw error;
 }
 
 export async function fetchActiveNgoRequest(client: Client, ngoId: string, donationId: string) {
