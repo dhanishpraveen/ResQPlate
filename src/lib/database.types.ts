@@ -131,8 +131,10 @@ type SurplusForecast = {
   restaurant_type: string;
   planned_quantity: number;
   expected_customers: number;
-  historical_sales: number;
-  historical_leftover: number;
+  historical_sales: number | null;
+  historical_leftover: number | null;
+  meal_period: "breakfast" | "lunch" | "dinner" | "banquet";
+  training_data_source: "synthetic_demo_hotel" | "verified_donor_history";
   ready_at: string;
   predicted_quantity: number;
   uncertainty_lower: number;
@@ -250,9 +252,10 @@ export type Database = {
       >;
       surplus_forecasts: Table<
         SurplusForecast,
-        Pick<SurplusForecast, "donor_id" | "food_category" | "restaurant_type" | "planned_quantity" | "expected_customers" | "historical_sales" | "historical_leftover" | "ready_at" | "predicted_quantity" | "uncertainty_lower" | "uncertainty_upper" | "unit" | "model_version"> &
+        Pick<SurplusForecast, "donor_id" | "food_category" | "restaurant_type" | "meal_period" | "planned_quantity" | "expected_customers" | "ready_at" | "predicted_quantity" | "uncertainty_lower" | "uncertainty_upper" | "unit" | "model_version"> &
+          Partial<Pick<SurplusForecast, "historical_sales" | "historical_leftover" | "training_data_source">> &
           Partial<Pick<SurplusForecast, "status" | "confirmed_quantity" | "actual_ready_at">>,
-        Partial<Pick<SurplusForecast, "food_category" | "restaurant_type" | "planned_quantity" | "expected_customers" | "historical_sales" | "historical_leftover" | "ready_at" | "status" | "confirmed_quantity" | "actual_ready_at">>
+        Partial<Pick<SurplusForecast, "food_category" | "restaurant_type" | "meal_period" | "planned_quantity" | "expected_customers" | "historical_sales" | "historical_leftover" | "training_data_source" | "ready_at" | "status" | "confirmed_quantity" | "actual_ready_at">>
       >;
       ngo_demand_requirements: Table<
         NgoDemandRequirement,

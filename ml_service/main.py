@@ -11,8 +11,16 @@ app = FastAPI(title="ResQPlate surplus prediction service", version=MODEL_VERSIO
 
 
 @app.get("/health")
-def health() -> dict[str, str | bool]:
-    return {"ok": MODEL_PATH.is_file(), "model_version": MODEL_VERSION}
+def health() -> dict[str, object]:
+    return {
+        "ok": MODEL_PATH.is_file(),
+        "model_version": MODEL_VERSION,
+        "training_data": "synthetic_demo_hotel",
+        "dataset_records": 1200,
+        "target": "leftover_quantity",
+        "unit": TARGET_UNIT,
+        "features": list(FEATURE_COLUMNS),
+    }
 
 
 @app.post("/predict")
@@ -23,6 +31,7 @@ def predict_surplus(request: PredictionRequest) -> dict[str, object]:
         raise HTTPException(status_code=503, detail=str(error)) from error
     payload = request.model_dump()
     ready_at = payload.pop("ready_at")
+    payload["restaurant_type"] = payload["restaurant_type"]
     payload["day_of_week"] = ready_at.weekday()
     payload["ready_hour"] = ready_at.hour
     payload = {column: payload[column] for column in FEATURE_COLUMNS}

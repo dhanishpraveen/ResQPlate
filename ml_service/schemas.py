@@ -2,16 +2,15 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from .model import SUPPORTED_CATEGORIES, validate_timestamp
+from .model import SUPPORTED_CATEGORIES, SUPPORTED_MEAL_PERIODS, validate_timestamp
 
 
 class PredictionRequest(BaseModel):
     restaurant_type: str = Field(min_length=1, max_length=80)
     food_category: str
+    meal_period: str
     planned_quantity: float = Field(gt=0, le=100_000)
     expected_customers: int = Field(ge=0, le=100_000)
-    historical_sales: float = Field(ge=0, le=100_000)
-    historical_leftover: float = Field(ge=0, le=100_000)
     ready_at: datetime
 
     @field_validator("food_category")
@@ -26,6 +25,14 @@ class PredictionRequest(BaseModel):
     @classmethod
     def normalized_restaurant_type(cls, value: str) -> str:
         return value.strip().lower()
+
+    @field_validator("meal_period")
+    @classmethod
+    def supported_meal_period(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in SUPPORTED_MEAL_PERIODS:
+            raise ValueError(f"meal_period must be one of: {', '.join(SUPPORTED_MEAL_PERIODS)}")
+        return normalized
 
     @field_validator("ready_at")
     @classmethod

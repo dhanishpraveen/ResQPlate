@@ -14,10 +14,9 @@ export type ForecastInput = {
   donor_id: string;
   food_category: string;
   restaurant_type: string;
+  meal_period: "breakfast" | "lunch" | "dinner" | "banquet";
   planned_quantity: number;
   expected_customers: number;
-  historical_sales: number;
-  historical_leftover: number;
   ready_at: string;
 };
 

@@ -254,10 +254,9 @@ export function DonorDashboardPage() {
 type ForecastForm = {
   food_category: string;
   restaurant_type: string;
+  meal_period: "breakfast" | "lunch" | "dinner" | "banquet";
   planned_quantity: string;
   expected_customers: string;
-  historical_sales: string;
-  historical_leftover: string;
   ready_at: string;
 };
 
@@ -275,6 +274,13 @@ const restaurantTypes = [
   { value: "caterer", label: "Caterer" },
 ];
 
+const mealPeriods = [
+  { value: "breakfast", label: "Breakfast" },
+  { value: "lunch", label: "Lunch" },
+  { value: "dinner", label: "Dinner" },
+  { value: "banquet", label: "Banquet / event" },
+];
+
 function forecastDateLabel(value: string) {
   return dateLabel(value ? new Date(value).toISOString() : null);
 }
@@ -285,10 +291,9 @@ export function DonorForecastPage() {
   const [form, setForm] = useState<ForecastForm>({
     food_category: "prepared_meal",
     restaurant_type: "restaurant",
+    meal_period: "dinner",
     planned_quantity: "",
     expected_customers: "",
-    historical_sales: "",
-    historical_leftover: "",
     ready_at: "",
   });
   const [prediction, setPrediction] = useState<ForecastPrediction | null>(null);
@@ -326,15 +331,13 @@ export function DonorForecastPage() {
     }
     const plannedQuantity = Number(form.planned_quantity);
     const expectedCustomers = Number(form.expected_customers);
-    const historicalSales = Number(form.historical_sales);
-    const historicalLeftover = Number(form.historical_leftover);
     const readyDate = new Date(form.ready_at);
     if (!form.ready_at || Number.isNaN(readyDate.getTime()) || readyDate <= new Date()) {
       setError("Choose a future ready date and time.");
       return;
     }
-    if (![plannedQuantity, expectedCustomers, historicalSales, historicalLeftover].every(Number.isFinite) || plannedQuantity <= 0 || expectedCustomers < 0 || historicalSales < 0 || historicalLeftover < 0) {
-      setError("Enter valid non-negative history values and a planned quantity greater than zero.");
+    if (![plannedQuantity, expectedCustomers].every(Number.isFinite) || plannedQuantity <= 0 || expectedCustomers < 0) {
+      setError("Enter a planned quantity greater than zero and a non-negative expected customer count.");
       return;
     }
 
@@ -346,10 +349,9 @@ export function DonorForecastPage() {
       const input = {
         food_category: form.food_category,
         restaurant_type: form.restaurant_type,
+        meal_period: form.meal_period,
         planned_quantity: plannedQuantity,
         expected_customers: expectedCustomers,
-        historical_sales: historicalSales,
-        historical_leftover: historicalLeftover,
         ready_at: readyDate.toISOString(),
       };
       const result = await predictSurplus(supabase, input);
@@ -375,18 +377,17 @@ export function DonorForecastPage() {
           {error && <ErrorState description={error} />}
           {success && <InlineAlert tone="success">{success}</InlineAlert>}
           <Card padding="lg">
-            <SectionHeading description="The current model requires sales and leftover history inputs. Use real, unit-consistent records for meaningful estimates." title="Prediction inputs" />
+            <SectionHeading description="This demo model uses synthetic hotel history. Enter only information known before preparation begins." title="Prediction inputs" />
             <form className="donor-form-fields" onSubmit={(event) => void submit(event)}>
               <SelectField label="Food category" onChange={(event) => update("food_category", event.target.value)} options={forecastCategories} required value={form.food_category} />
               <SelectField label="Restaurant type" onChange={(event) => update("restaurant_type", event.target.value)} options={restaurantTypes} required value={form.restaurant_type} />
+              <SelectField label="Meal period" onChange={(event) => update("meal_period", event.target.value as ForecastForm["meal_period"])} options={mealPeriods} required value={form.meal_period} />
               <TextField label="Planned preparation quantity" min="0.001" onChange={(event) => update("planned_quantity", event.target.value)} required step="0.001" type="number" value={form.planned_quantity} />
               <TextField label="Expected customers / orders" min="0" onChange={(event) => update("expected_customers", event.target.value)} required step="1" type="number" value={form.expected_customers} />
-              <TextField hint="Required by the current model; enter 0 only when you have no recorded sales history." label="Historical sales" min="0" onChange={(event) => update("historical_sales", event.target.value)} required step="0.001" type="number" value={form.historical_sales} />
-              <TextField hint="Required by the current model; enter 0 only when you have no recorded leftover history." label="Historical leftover" min="0" onChange={(event) => update("historical_leftover", event.target.value)} required step="0.001" type="number" value={form.historical_leftover} />
               <TextField className="donor-form-wide" label="Expected food-ready date and time" onChange={(event) => update("ready_at", event.target.value)} required type="datetime-local" value={form.ready_at} />
-              {(form.historical_sales === "" || form.historical_leftover === "") && <div className="donor-form-wide"><InlineAlert tone="info">No history data is entered yet. The prediction cannot run until the required model inputs are provided.</InlineAlert></div>}
+              <div className="donor-form-wide"><InlineAlert tone="info">Demo Historical Data: the model was trained on fictional synthetic hotel records, not your personal history.</InlineAlert></div>
               <div className="donor-form-actions donor-form-wide">
-                <Button disabled={busy || form.historical_sales === "" || form.historical_leftover === ""} loading={busy} type="submit">{busy ? "Predicting…" : "Predict Food Surplus"}</Button>
+                <Button disabled={busy} loading={busy} type="submit">{busy ? "Predicting…" : "Predict Food Surplus"}</Button>
                 <Link className="donor-text-link" to="/donor/donations/new">Create a confirmed donation instead <ArrowRight size={15} /></Link>
               </div>
             </form>

@@ -497,15 +497,18 @@ already complete.
 
 ### AI surplus workflow audit and ML foundation
 
-- Audited the current schema and repository: no historical sales/leftover
-  dataset, forecast/demand/allocation/notification tables, map coordinates,
-  delivery OTP backend, or Python service exists.
+- Audited the current schema and repository: no real historical sales/leftover
+  dataset, map coordinates, delivery OTP backend, notification transport, or
+  map provider exists.
 - Added a standalone Random Forest surplus-prediction service under
   `ml_service/` with strict validation, persisted model loading, uncertainty
-  bounds, time-ordered evaluation, and a clearly labelled synthetic
-  development dataset.
-- Development-only evaluation produced MAE 11.525 and RMSE 16.516 versus a
-  simple baseline MAE of 35.244; these figures are not production accuracy.
+  bounds, time-ordered evaluation, and a clearly labelled synthetic hotel
+  dataset containing 1,200 reproducible records.
+- The model uses only pre-service features: restaurant type, food category,
+  meal period, day of week, ready hour, expected customers, and planned
+  quantity. Development-only evaluation produced MAE 6.751 and RMSE 9.391
+  versus a simple baseline MAE of 8.194; these figures are not production
+  accuracy.
 - Added and applied an additive migration for forecast persistence, NGO
   demand, explainable recommendations, quantity reservations, notification
   events, RLS, and idempotent reservation/release RPCs. Added a matching
@@ -517,8 +520,13 @@ already complete.
 ### Donor AI prediction UI milestone
 
 - Added the donor-only `/donor/forecast` route and a visible dashboard card.
-  The form collects category, restaurant type, planned quantity, expected
-  customers, historical sales/leftovers, and future ready time.
+  The form collects category, restaurant type, meal period, planned quantity,
+  expected customers, and future ready time. It no longer blocks new donors
+  because they lack donor-specific history.
+- Added the demo model artifact at
+  `ml_service/artifacts/surplus_model.joblib` and documented deterministic
+  regeneration in `ml_service/data/README.md`. The UI labels every result as
+  based on synthetic demo data.
 - Added the `predict-surplus` Edge Function as the authenticated gateway to
   FastAPI. It verifies the donor role, calls the existing prediction endpoint,
   and inserts the estimate into `surplus_forecasts` through RLS.

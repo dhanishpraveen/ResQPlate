@@ -7,8 +7,9 @@
   workflows.
 - The database has no historical preparation, sales, leftover, forecast,
   demand, allocation, notification, coordinate, or delivery-OTP entities.
-- No Python service, Edge Function, notification transport, map provider, or
-  usable historical dataset exists in the repository.
+- No notification transport or map provider exists in the repository. The
+  Python service now includes a reproducible synthetic hotel dataset and a
+  persisted demo artifact; it is not real donor history.
 - The current delivery backend therefore cannot safely support the requested
   forecast-to-dispatch workflow without additive schema and trusted backend
   work.
@@ -25,9 +26,12 @@
 - tree-quantile uncertainty bounds;
 - explicit `503` behavior when the model artifact has not been trained.
 
-The included dataset is deterministic synthetic development data only. It is
-not evidence of production accuracy and must be replaced with real,
-unit-consistent restaurant records before forecasts are shown to users.
+The included `ml_service/data/demo_hotel_history.csv` contains 1,200
+deterministic synthetic development records. The model predicts
+`leftover_quantity` from pre-service inputs only; actual sales and leftovers
+are training targets/observations, not donor request features. It is not
+evidence of production accuracy and must be replaced with real, unit-consistent
+restaurant records before production forecasts are trusted.
 
 ## Required next backend work
 
@@ -43,16 +47,29 @@ Travel is never inferred when coordinates or a configured routing result are
 missing.
 
 The migration was applied to the configured Supabase project after explicit
-approval. The donor forecast UI now calls the `predict-surplus` Edge Function,
+approval. A follow-up additive migration makes obsolete donor-history fields
+nullable and stores the meal period and training-data source. The donor
+forecast UI now calls the `predict-surplus` Edge Function,
 which verifies the authenticated donor role, calls FastAPI server-side, and
 persists the returned forecast through RLS. The browser does not receive ML
 service credentials.
 
 To enable the feature in a deployed environment, deploy
 `supabase/functions/predict-surplus/index.ts` and configure its
-`ML_SERVICE_URL` secret to the reachable FastAPI service URL. The current
-repository still has no notification transport or deployed gateway, so local
-source integration is complete but hosted end-to-end prediction remains
-unverified until those services are deployed.
+`ML_SERVICE_URL` secret to the reachable HTTPS FastAPI service URL. The
+function is deployed to the configured ResQPlate project with JWT verification
+enabled. The local example value `http://127.0.0.1:8000` is not reachable from
+hosted Edge Functions. Hosted end-to-end prediction remains unverified until
+a reachable ML service URL is stored and a donor-authenticated request
+successfully persists a forecast.
+
+CLI equivalents are:
+
+```powershell
+supabase functions deploy predict-surplus --project-ref ohfooorhpbciphscxteb
+supabase secrets set ML_SERVICE_URL=https://<reachable-ml-service>/ --project-ref ohfooorhpbciphscxteb
+```
+
+Do not place the ML URL in a `VITE_` variable or browser bundle.
 
 No hosted schema or production data was changed by this audit/foundation work.
