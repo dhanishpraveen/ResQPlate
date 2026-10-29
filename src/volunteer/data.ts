@@ -119,6 +119,29 @@ export async function confirmVolunteerPickup(client: Client, requestId: string, 
   if (error) throw error;
 }
 
+export function isPickupExpired(expiresAt: string, now = Date.now()) {
+  const expiresAtTime = Date.parse(expiresAt);
+  return Number.isFinite(expiresAtTime) && expiresAtTime <= now;
+}
+
+export function volunteerPickupErrorMessage(error: unknown) {
+  const message = typeof error === "object" && error !== null && "message" in error
+    && typeof error.message === "string"
+    ? error.message
+    : error instanceof Error ? error.message : "";
+
+  if (message === "Pickup cannot be confirmed for this task") {
+    return "This donation has expired and pickup can no longer be confirmed. Contact the donor or NGO to arrange next steps.";
+  }
+  if (message === "Task is not assigned to this volunteer") {
+    return "This task is no longer assigned to your volunteer account. Refresh the task list.";
+  }
+  if (message === "A completed volunteer profile is required to confirm pickup") {
+    return "Complete your volunteer profile before confirming a pickup.";
+  }
+  return message || "Pickup confirmation could not be completed.";
+}
+
 export function isAssignedVolunteerTask(task: VolunteerTask) {
   return typeof task.volunteer_assigned === "boolean"
     ? task.volunteer_assigned
@@ -132,10 +155,11 @@ export function taskStatusLabel(status: VolunteerTask["status"]) {
   return status.replaceAll("_", " ");
 }
 
-export function taskDeliveryLabel(task: VolunteerTask) {
+export function taskDeliveryLabel(task: VolunteerTask, now = Date.now()) {
   if (task.status === "completed") return "Verified";
   if (task.volunteer_delivered_at) return "Awaiting NGO confirmation";
   if (task.volunteer_picked_up_at) return "In transit";
+  if (task.status === "confirmed" && isPickupExpired(task.expires_at, now)) return "Pickup expired";
   if (task.status === "confirmed") return "Pickup pending";
   return taskStatusLabel(task.status);
 }

@@ -1,12 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   coordinatesAreValid,
   distanceInKilometers,
+  confirmVolunteerPickup,
+  isPickupExpired,
   isAssignedVolunteerTask,
   mapVolunteerTaskResponse,
+  taskDeliveryLabel,
   taskStatusLabel,
   type VolunteerTask,
   volunteerNavigationStage,
+  volunteerPickupErrorMessage,
 } from "./data";
 
 function task(overrides: Partial<VolunteerTask> = {}): VolunteerTask {
@@ -50,6 +54,37 @@ describe("volunteer task data helpers", () => {
   it("formats persisted lifecycle statuses for task cards", () => {
     expect(taskStatusLabel("picked_up")).toBe("Out for delivery");
     expect(taskStatusLabel("completed")).toBe("Delivered");
+  });
+
+  it("reports expired confirmed pickups instead of showing pickup pending", () => {
+    const now = Date.parse("2026-10-30T12:00:00.000Z");
+    const expiredTask = task({ expires_at: "2026-10-30T11:59:59.000Z" });
+
+    expect(isPickupExpired(expiredTask.expires_at, now)).toBe(true);
+    expect(isPickupExpired("2026-10-30T12:00:01.000Z", now)).toBe(false);
+    expect(taskDeliveryLabel(expiredTask, now)).toBe("Pickup expired");
+  });
+
+  it("maps pickup RPC readiness and authorization errors to useful messages", () => {
+    expect(volunteerPickupErrorMessage({
+      code: "P0001",
+      message: "Pickup cannot be confirmed for this task",
+    })).toContain("donation has expired");
+    expect(volunteerPickupErrorMessage({
+      code: "42501",
+      message: "Task is not assigned to this volunteer",
+    })).toContain("no longer assigned");
+  });
+
+  it("calls the pickup RPC with its typed request and note parameters", async () => {
+    const rpc = vi.fn().mockResolvedValue({ error: null });
+
+    await expect(confirmVolunteerPickup({ rpc } as never, "request-1", "Collected safely"))
+      .resolves.toBeUndefined();
+    expect(rpc).toHaveBeenCalledWith("volunteer_confirm_pickup", {
+      p_request_id: "request-1",
+      p_note: "Collected safely",
+    });
   });
 
   it("switches the active navigation destination only after persisted task transitions", () => {

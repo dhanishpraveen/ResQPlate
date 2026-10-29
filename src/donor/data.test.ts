@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildDonationWriteValues, createDonation, formatDonationSaveError, uploadPrivateImage } from "./data";
+import {
+  buildDonationWriteValues,
+  canConfirmDonorHandover,
+  createDonation,
+  fetchPickupRequestVolunteerAssignment,
+  formatDonationSaveError,
+  formatSupabaseError,
+  uploadPrivateImage,
+} from "./data";
 import donationLocationGrantMigration from "../../supabase/migrations/20261029235100_grant_donation_location_columns.sql?raw";
 
 describe("donation data helpers", () => {
@@ -74,6 +82,37 @@ describe("donation data helpers", () => {
     })).toBe(
       "Code: 42501 — permission denied for table donations — Details: request by user [redacted id] — Hint: Authorization=[redacted]",
     );
+  });
+
+  it("formats structured Supabase errors instead of coercing error objects", () => {
+    expect(formatSupabaseError({
+      code: "P0001",
+      message: "The assigned volunteer must confirm pickup",
+    })).toBe("Code: P0001 — The assigned volunteer must confirm pickup");
+    expect(formatSupabaseError({ code: "42501", message: "denied for user 123e4567-e89b-42d3-a456-426614174000" }))
+      .toBe("Code: 42501 — denied for user [redacted id]");
+    expect(formatSupabaseError({ message: "Contact +1 (555) 123-4567" }))
+      .toBe("Contact [redacted phone]");
+    expect(formatSupabaseError({ message: `Stored hash ${"a".repeat(64)}` }))
+      .toBe("Stored hash [redacted hash]");
+  });
+
+  it("does not offer donor handover when the volunteer owns pickup confirmation", () => {
+    expect(canConfirmDonorHandover("confirmed", "claimed", false)).toBe(true);
+    expect(canConfirmDonorHandover("confirmed", "claimed", true)).toBe(false);
+    expect(canConfirmDonorHandover("picked_up", "picked_up", false)).toBe(false);
+  });
+
+  it("reads only volunteer assignment through the donor-visible pickup request policy", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({ data: { volunteer_id: "assigned-volunteer" }, error: null });
+    const eq = vi.fn().mockReturnValue({ maybeSingle });
+    const select = vi.fn().mockReturnValue({ eq });
+    const from = vi.fn().mockReturnValue({ select });
+
+    await expect(fetchPickupRequestVolunteerAssignment({ from } as never, "request-id")).resolves.toBe(true);
+    expect(from).toHaveBeenCalledWith("pickup_requests");
+    expect(select).toHaveBeenCalledWith("volunteer_id");
+    expect(eq).toHaveBeenCalledWith("id", "request-id");
   });
 
   it("returns the storage path after a successful upload", async () => {

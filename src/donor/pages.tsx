@@ -43,9 +43,12 @@ import {
   createDonation,
   fetchDonations,
   fetchPickupRequests,
+  fetchPickupRequestVolunteerAssignment,
   fetchSignedImages,
   buildDonationWriteValues,
   formatDonationSaveError,
+  formatSupabaseError,
+  canConfirmDonorHandover,
   uploadPrivateImage,
   type CompletedImpactRow,
   type DonationRow,
@@ -59,7 +62,7 @@ import { predictSurplus } from "../ai/api";
 type LoadState<T> = { data: T; error: null; loading: false } | { data: null; error: string; loading: false } | { data: null; error: null; loading: true };
 
 function messageOf(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  return formatSupabaseError(error);
 }
 
 function dateLabel(value: string | null) {
@@ -931,6 +934,7 @@ export function PickupRequestDetailsPage() {
   const [request, setRequest] = useState<PickupRequestRow | null>(null);
   const [donation, setDonation] = useState<DonationRow | null>(null);
   const [handover, setHandover] = useState<HandoverRow | null>(null);
+  const [volunteerAssigned, setVolunteerAssigned] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -946,6 +950,7 @@ export function PickupRequestDetailsPage() {
       const requestRows = await fetchPickupRequests(supabase);
       const requestRow = requestRows.find((row) => row.request_id === requestId);
       if (!requestRow) throw new Error("This pickup request is unavailable or not related to your donations.");
+      const assigned = await fetchPickupRequestVolunteerAssignment(supabase, requestId);
       const { data: donationRow, error: donationError } = await supabase.from("donations").select("*").eq("id", requestRow.donation_id).eq("donor_id", session.user.id).single();
       if (donationError) throw donationError;
       const { data: handoverRow, error: handoverError } = await supabase.from("donation_handovers").select("*").eq("pickup_request_id", requestId).maybeSingle();
@@ -954,6 +959,7 @@ export function PickupRequestDetailsPage() {
       setRequest(requestRow);
       setDonation(donationRow);
       setHandover(handoverRow);
+      setVolunteerAssigned(assigned);
       setImageUrl(donationRow.photo_path ? photoUrls.get(donationRow.photo_path) : undefined);
     } catch (cause) {
       setError(messageOf(cause));
@@ -988,7 +994,7 @@ export function PickupRequestDetailsPage() {
       let detail = messageOf(cause);
       if (uploadedPath) {
         const { error: cleanupError } = await supabase.storage.from("handover-evidence").remove([uploadedPath]);
-        if (cleanupError) detail += ` The uploaded photo could not be removed: ${cleanupError.message}`;
+        if (cleanupError) detail += ` The uploaded photo could not be removed: ${messageOf(cleanupError)}`;
       }
       setError(detail);
     } finally {
@@ -999,7 +1005,7 @@ export function PickupRequestDetailsPage() {
   if (loading) return <DonorShell activeLabel="Pickup Requests" title="Pickup Details & Handover"><LoadingState label="Loading pickup details" /></DonorShell>;
   if (error || !request || !donation) return <DonorShell activeLabel="Pickup Requests" title="Pickup Details & Handover"><ErrorState description={error ?? "Pickup details are unavailable."} onRetry={() => void reload()} /></DonorShell>;
 
-  const canHandover = request.status === "confirmed" && donation.status === "claimed";
+  const canHandover = canConfirmDonorHandover(request.status, donation.status, volunteerAssigned);
   const steps = [
     { label: "Request received", detail: dateLabel(request.created_at), state: "complete" as const },
     { label: "Pickup confirmed", detail: request.status === "pending" ? "Waiting for your response" : undefined, state: request.status === "pending" ? "current" as const : "complete" as const },
@@ -1043,6 +1049,11 @@ export function PickupRequestDetailsPage() {
                 <InlineAlert tone="info">This records donor handover only. The donation is not marked completed until the recipient confirms receipt.</InlineAlert>
                 <Button loading={busy} type="submit">Confirm Handover</Button>
               </form>
+            </Card>
+          ) : volunteerAssigned && request.status === "confirmed" ? (
+            <Card padding="lg">
+              <SectionHeading title="Volunteer Pickup Assigned" />
+              <InlineAlert tone="info">The assigned volunteer will confirm pickup and record the handover after collecting the food.</InlineAlert>
             </Card>
           ) : handover ? (
             <Card padding="lg">

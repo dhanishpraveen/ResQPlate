@@ -123,7 +123,7 @@ describe("volunteer task navigation stages", () => {
     expect(screen.getAllByTestId("map-marker")).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Mark Food Collected" }));
-    expect(await screen.findByRole("button", { name: "Reached NGO / Start Delivery Verification" })).toBeInTheDocument();
+    expect(await screen.findByRole("textbox", { name: "Four-digit NGO delivery code" })).toBeInTheDocument();
     expect(screen.getByText("20 NGO Lane")).toBeInTheDocument();
     expect(screen.queryByText("10 Donor Road")).not.toBeInTheDocument();
     expect(screen.getByTestId("active-delivery-map")).toBeInTheDocument();
@@ -185,22 +185,19 @@ describe("volunteer task navigation stages", () => {
     expect(screen.getByRole("link", { name: /Open pickup directions/ })).toBeInTheDocument();
   });
 
-  it("verifies the NGO code through the Edge Function and does not call the old delivery RPC", async () => {
+  it("verifies the four-digit NGO code through the Edge Function only", async () => {
     renderTaskPage();
     fireEvent.click(await screen.findByRole("button", { name: "Accept Task" }));
     fireEvent.click(await screen.findByRole("button", { name: "Mark Food Collected" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Reached NGO / Start Delivery Verification" }));
 
-    const codeInput = await screen.findByRole("textbox", { name: "NGO delivery verification code" });
-    fireEvent.change(codeInput, { target: { value: "123456" } });
+    const codeInput = await screen.findByRole("textbox", { name: "Four-digit NGO delivery code" });
+    fireEvent.change(codeInput, { target: { value: "1234" } });
     fireEvent.click(screen.getByRole("button", { name: "Verify delivery code" }));
 
     expect(await screen.findByText("Delivery verification is complete; awaiting NGO receipt confirmation.")).toBeInTheDocument();
-    expect(mocks.invoke).toHaveBeenNthCalledWith(1, "delivery-otp", {
-      body: { action: "send", request_id: "request-0001" },
-    });
-    expect(mocks.invoke).toHaveBeenNthCalledWith(2, "delivery-otp", {
-      body: { action: "verify", request_id: "request-0001", otp: "123456" },
+    expect(mocks.invoke).toHaveBeenCalledOnce();
+    expect(mocks.invoke).toHaveBeenCalledWith("delivery-otp", {
+      body: { action: "verify", request_id: "request-0001", otp: "1234" },
     });
     expect(mocks.rpc).not.toHaveBeenCalledWith("volunteer_confirm_delivery", expect.anything());
     expect(screen.queryByTestId("active-delivery-map")).not.toBeInTheDocument();
@@ -212,8 +209,21 @@ describe("volunteer task navigation stages", () => {
     renderTaskPage();
     fireEvent.click(await screen.findByRole("button", { name: "Accept Task" }));
     fireEvent.click(await screen.findByRole("button", { name: "Mark Food Collected" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Reached NGO / Start Delivery Verification" }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "Four-digit NGO delivery code" }), { target: { value: "0042" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify delivery code" }));
 
     expect(await screen.findByText(/Check the function deployment, allowed browser origin, and network connection/)).toBeInTheDocument();
+  });
+
+  it("accepts only a four-digit OTP and does not display any generated code", async () => {
+    renderTaskPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Accept Task" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Mark Food Collected" }));
+
+    expect(screen.queryByText("1234")).not.toBeInTheDocument();
+    const input = await screen.findByRole("textbox", { name: "Four-digit NGO delivery code" });
+    fireEvent.change(input, { target: { value: "12345" } });
+    expect(input).toHaveValue("1234");
+    expect(screen.getByRole("button", { name: "Verify delivery code" })).toBeEnabled();
   });
 });

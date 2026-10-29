@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { AvailableDonationsPage, NgoDashboardPage, NgoDonationDetailsPage, RequestPickupPage } from "./pages";
+import { AvailableDonationsPage, NgoDashboardPage, NgoDeliveryDetailsPage, NgoDonationDetailsPage, RequestPickupPage } from "./pages";
 import type { NgoDonation } from "./data";
 import { useAuth } from "../auth/AuthContext";
 import {
@@ -9,17 +9,22 @@ import {
   fetchActiveNgoRequest,
   fetchAvailableDonations,
   fetchDonation,
+  fetchHandover,
   fetchNgoProfile,
+  fetchNgoRequest,
   fetchNgoRequests,
+  fetchRequestHistory,
 } from "./data";
 import { fetchSignedImages } from "../lib/storage";
+
+const mocks = vi.hoisted(() => ({ invoke: vi.fn() }));
 
 vi.mock("../auth/AuthContext", () => ({
   useAuth: vi.fn(),
 }));
 
 vi.mock("../lib/supabase", () => ({
-  supabase: {},
+  supabase: { functions: { invoke: mocks.invoke } },
   supabaseConfigurationError: null,
 }));
 
@@ -87,6 +92,7 @@ describe("NGO available donations screen", () => {
       profileError: null,
       refreshProfile: async () => true,
     });
+    mocks.invoke.mockReset();
   });
 
   it("renders visible listings and filters them by search and cuisine", async () => {
@@ -306,5 +312,76 @@ describe("NGO available donations screen", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/donation may no longer be available/i);
     expect(screen.queryByRole("link", { name: "Review your requests" })).not.toBeInTheDocument();
+  });
+});
+
+describe("NGO in-app delivery verification", () => {
+  beforeEach(() => {
+    vi.mocked(useAuth).mockReturnValue({
+      session: { user: { id: "ngo-1", email: "ngo@example.org" } } as ReturnType<typeof useAuth>["session"],
+      profile: null,
+      roleOnboardingComplete: true,
+      loading: false,
+      profileError: null,
+      refreshProfile: async () => true,
+    });
+    vi.mocked(fetchNgoRequest).mockReset().mockResolvedValue({
+      id: "request-otp-1",
+      donation_id: "donation-1",
+      ngo_id: "ngo-1",
+      requested_quantity: 12,
+      pickup_at: null,
+      notes: null,
+      status: "picked_up",
+      received_quantity: null,
+      receipt_confirmed_at: null,
+      created_at: "2026-10-29T10:00:00.000Z",
+      updated_at: "2026-10-29T10:00:00.000Z",
+      volunteer_id: "volunteer-1",
+      volunteer_picked_up_at: "2026-10-29T11:00:00.000Z",
+      volunteer_delivered_at: null,
+      delivery_verification_status: "pending",
+      delivery_verified_at: null,
+      delivery_issue_reason: null,
+    } as never);
+    vi.mocked(fetchHandover).mockReset().mockResolvedValue(null);
+    vi.mocked(fetchRequestHistory).mockReset().mockResolvedValue([]);
+    mocks.invoke.mockReset().mockResolvedValue({
+      data: { ok: true, active: true, otp: "0072", expires_at: "2026-10-30T01:00:00.000Z" },
+      error: null,
+    });
+  });
+
+  it("retrieves and displays an active code only in the NGO delivery dashboard", async () => {
+    render(
+      <MemoryRouter initialEntries={["/ngo/deliveries/request-otp-1"]}>
+        <Routes>
+          <Route element={<NgoDeliveryDetailsPage />} path="/ngo/deliveries/:requestId" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByLabelText("Active delivery code")).toHaveTextContent("0072");
+    expect(mocks.invoke).toHaveBeenCalledWith("delivery-otp", {
+      body: { action: "ngo_get", request_id: "request-otp-1" },
+    });
+    expect(screen.getByText(/Share it in person/)).toBeInTheDocument();
+  });
+
+  it("lets the NGO owner generate a new code through the trusted function", async () => {
+    mocks.invoke.mockResolvedValueOnce({ data: { ok: true, active: false }, error: null });
+    render(
+      <MemoryRouter initialEntries={["/ngo/deliveries/request-otp-1"]}>
+        <Routes>
+          <Route element={<NgoDeliveryDetailsPage />} path="/ngo/deliveries/:requestId" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Generate delivery code" }));
+    expect(await screen.findByLabelText("Active delivery code")).toHaveTextContent("0072");
+    expect(mocks.invoke).toHaveBeenNthCalledWith(2, "delivery-otp", {
+      body: { action: "ngo_issue", request_id: "request-otp-1" },
+    });
   });
 });

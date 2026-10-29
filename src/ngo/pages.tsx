@@ -82,6 +82,20 @@ function messageOf(error: unknown) {
   return String(error);
 }
 
+async function messageOfNgoFunctionError(error: unknown) {
+  if (typeof error === "object" && error !== null && "context" in error && error.context instanceof Response) {
+    try {
+      const body: unknown = await error.context.clone().json();
+      if (typeof body === "object" && body !== null && "error" in body && typeof body.error === "string") {
+        return body.error;
+      }
+    } catch {
+      return `Delivery verification service returned HTTP ${error.context.status}.`;
+    }
+  }
+  return messageOf(error);
+}
+
 function pickupRequestFailure(error: unknown) {
   if (typeof error === "object" && error !== null && "code" in error && typeof error.code === "string") {
     const message = "message" in error && typeof error.message === "string" ? error.message : "";
@@ -767,6 +781,9 @@ export function NgoDeliveryDetailsPage() {
   const [issueReason, setIssueReason] = useState("");
   const [reportingIssue, setReportingIssue] = useState(false);
   const [issueError, setIssueError] = useState<string | null>(null);
+  const [deliveryOtp, setDeliveryOtp] = useState<{ code: string; expiresAt: string } | null>(null);
+  const [deliveryOtpLoading, setDeliveryOtpLoading] = useState(false);
+  const [deliveryOtpError, setDeliveryOtpError] = useState<string | null>(null);
   const canReviewDelivery = Boolean(state.data
     && state.data.request.status === "picked_up"
     && state.data.request.delivery_verification_status === "pending"
@@ -783,7 +800,31 @@ export function NgoDeliveryDetailsPage() {
           fetchRequestHistory(supabase, request.id),
           fetchHandover(supabase, request.id),
         ]);
-        if (active) setState({ data: { request, history, handover }, error: null, loading: false });
+        if (active) {
+          setState({ data: { request, history, handover }, error: null, loading: false });
+          if (request.status === "picked_up"
+            && request.delivery_verification_status === "pending"
+            && request.volunteer_id
+            && !request.volunteer_delivered_at) {
+            setDeliveryOtpLoading(true);
+            try {
+              const { data: result, error: otpError } = await supabase.functions.invoke("delivery-otp", {
+                body: { action: "ngo_get", request_id: request.id },
+              });
+              if (otpError) throw otpError;
+              if (result?.active === true && typeof result.otp === "string" && /^\d{4}$/.test(result.otp)
+                && typeof result.expires_at === "string") {
+                if (active) setDeliveryOtp({ code: result.otp, expiresAt: result.expires_at });
+              } else if (active) {
+                setDeliveryOtp(null);
+              }
+            } catch (cause) {
+              if (active) setDeliveryOtpError(await messageOfNgoFunctionError(cause));
+            } finally {
+              if (active) setDeliveryOtpLoading(false);
+            }
+          }
+        }
       } catch (cause) {
         if (active) setState({ data: null, error: messageOf(cause), loading: false });
       }
@@ -791,6 +832,49 @@ export function NgoDeliveryDetailsPage() {
     void load();
     return () => { active = false; };
   }, [requestId, session]);
+
+  async function generateDeliveryOtp() {
+    if (!supabase || !state.data) return;
+    setDeliveryOtpLoading(true);
+    setDeliveryOtpError(null);
+    try {
+      const { data: result, error } = await supabase.functions.invoke("delivery-otp", {
+        body: { action: "ngo_issue", request_id: state.data.request.id },
+      });
+      if (error) throw error;
+      if (result?.active !== true || typeof result.otp !== "string" || !/^\d{4}$/.test(result.otp)
+        || typeof result.expires_at !== "string") {
+        throw new Error("The server did not return an active delivery code.");
+      }
+      setDeliveryOtp({ code: result.otp, expiresAt: result.expires_at });
+    } catch (cause) {
+      setDeliveryOtpError(await messageOfNgoFunctionError(cause));
+    } finally {
+      setDeliveryOtpLoading(false);
+    }
+  }
+
+  async function reloadDeliveryOtp() {
+    if (!supabase || !state.data) return;
+    setDeliveryOtpLoading(true);
+    setDeliveryOtpError(null);
+    try {
+      const { data: result, error } = await supabase.functions.invoke("delivery-otp", {
+        body: { action: "ngo_get", request_id: state.data.request.id },
+      });
+      if (error) throw error;
+      if (result?.active === true && typeof result.otp === "string" && /^\d{4}$/.test(result.otp)
+        && typeof result.expires_at === "string") {
+        setDeliveryOtp({ code: result.otp, expiresAt: result.expires_at });
+      } else {
+        setDeliveryOtp(null);
+      }
+    } catch (cause) {
+      setDeliveryOtpError(await messageOfNgoFunctionError(cause));
+    } finally {
+      setDeliveryOtpLoading(false);
+    }
+  }
 
   async function reportIssue(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -835,6 +919,30 @@ export function NgoDeliveryDetailsPage() {
             {state.data.request.volunteer_delivered_at && state.data.request.status !== "completed" && <InlineAlert tone="info" title="Delivered to your organization">A volunteer confirmed delivery on {dateLabel(state.data.request.volunteer_delivered_at)}. Confirm receipt to complete this request.</InlineAlert>}
             {state.data.request.delivery_verification_status === "verified" && <InlineAlert tone="success" title="Receipt verified">Your organization verified this delivery on {dateLabel(state.data.request.delivery_verified_at)}.</InlineAlert>}
             {state.data.request.delivery_verification_status === "issue_reported" && <InlineAlert tone="warning" title="Issue reported">{state.data.request.delivery_issue_reason}</InlineAlert>}
+            {isDelivery
+              && state.data.request.status === "picked_up"
+              && state.data.request.delivery_verification_status === "pending"
+              && state.data.request.volunteer_id
+              && !state.data.request.volunteer_delivered_at
+              && <section aria-label="In-person delivery verification" className="ngo-delivery-otp">
+                <SectionHeading description="Generate this code for the assigned volunteer. Share it in person; it is valid for 10 minutes." title="In-person delivery code" />
+                {deliveryOtpError && <InlineAlert tone="danger">{deliveryOtpError}</InlineAlert>}
+                {deliveryOtpLoading
+                  ? <LoadingState label="Checking active delivery code" />
+                  : deliveryOtp
+                    ? <div className="ngo-delivery-otp-active">
+                      <output aria-label="Active delivery code">{deliveryOtp.code}</output>
+                      <span>Expires {dateLabel(deliveryOtp.expiresAt)}</span>
+                      <p>Tell this code to your assigned volunteer in person. Do not share it with anyone else.</p>
+                    </div>
+                    : <InlineAlert tone="info">No active code. Generate one when the volunteer is present.</InlineAlert>}
+                <div className="ngo-form-actions">
+                  <Button disabled={deliveryOtpLoading} loading={deliveryOtpLoading} onClick={() => void generateDeliveryOtp()} type="button">
+                    {deliveryOtp ? "Generate new code" : "Generate delivery code"}
+                  </Button>
+                  <Button disabled={deliveryOtpLoading} onClick={() => void reloadDeliveryOtp()} type="button" variant="outline">Refresh code</Button>
+                </div>
+              </section>}
             {isDelivery && canReviewDelivery && <div className="ngo-form-actions">
               <Link className="ngo-button-link" to={`/ngo/deliveries/${state.data.request.id}/receipt`}>Confirm food receipt</Link>
             </div>}

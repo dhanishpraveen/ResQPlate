@@ -40,10 +40,12 @@ import {
   confirmVolunteerPickup,
   fetchVolunteerTasks,
   distanceInKilometers,
+  isPickupExpired,
   isAssignedVolunteerTask,
   taskStatusLabel,
   taskDeliveryLabel,
   volunteerNavigationStage,
+  volunteerPickupErrorMessage,
   type VolunteerTask,
 } from "./data";
 
@@ -405,7 +407,6 @@ export function VolunteerTaskDetailsPage() {
   const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [otpCode, setOtpCode] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
   const [otpBusy, setOtpBusy] = useState(false);
   const task = data?.find((item) => item.request_id === requestId) ?? null;
   const assigned = task ? isAssignedVolunteerTask(task) : false;
@@ -452,31 +453,10 @@ export function VolunteerTaskDetailsPage() {
       }
       await reload();
     } catch (cause) {
-      setActionError(messageOf(cause));
+      setActionError(action === "pickup" ? volunteerPickupErrorMessage(cause) : messageOf(cause));
       await reload();
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function sendDeliveryOtp() {
-    if (!supabase || !task || otpBusy) return;
-    setOtpBusy(true);
-    setActionError(null);
-    setSuccess(null);
-    try {
-      const { data: result, error: functionError } = await supabase.functions.invoke("delivery-otp", {
-        body: { action: "send", request_id: task.request_id },
-      });
-      if (functionError) throw functionError;
-      if (!result || result.ok !== true) throw new Error("The delivery verification code could not be sent.");
-      setOtpSent(true);
-      setOtpCode("");
-      setSuccess("A verification code was sent to the NGO's verified owner mobile.");
-    } catch (cause) {
-      setActionError(await messageOfEdgeError(cause));
-    } finally {
-      setOtpBusy(false);
     }
   }
 
@@ -493,7 +473,6 @@ export function VolunteerTaskDetailsPage() {
       if (functionError) throw functionError;
       if (!result || result.ok !== true) throw new Error("Delivery verification was not confirmed.");
       setOtpCode("");
-      setOtpSent(false);
       setSuccess("NGO delivery verified. The organization will confirm final receipt.");
       await reload();
     } catch (cause) {
@@ -507,10 +486,8 @@ export function VolunteerTaskDetailsPage() {
     : stage === "before_acceptance"
       ? <Button icon={<Check size={16} />} loading={busy} onClick={() => void perform("claim")}>Accept Task</Button>
       : stage === "pickup"
-        ? <Button icon={<Check size={16} />} loading={busy} onClick={() => void perform("pickup")}>Mark Food Collected</Button>
-        : stage === "dropoff"
-          ? !otpSent && <Button icon={<Check size={16} />} loading={otpBusy} onClick={() => void sendDeliveryOtp()}>Reached NGO / Start Delivery Verification</Button>
-          : null;
+        ? <Button disabled={isPickupExpired(task.expires_at)} icon={<Check size={16} />} loading={busy} onClick={() => void perform("pickup")}>Mark Food Collected</Button>
+        : null;
 
   return (
   <VolunteerShell
@@ -601,23 +578,21 @@ export function VolunteerTaskDetailsPage() {
                         })()
                         : routeAddress && <a className="volunteer-directions-link" href={directionsUrl(routeAddress) ?? undefined} rel="noreferrer" target="_blank">Open NGO directions <ArrowRight size={14} /></a>}
                     </div>
-                    {otpSent && (
-                      <form className="volunteer-otp-form" onSubmit={(event) => void verifyDeliveryOtp(event)}>
-                        <label htmlFor="delivery-otp">NGO delivery verification code</label>
-                        <input
-                          autoComplete="one-time-code"
-                          id="delivery-otp"
-                          inputMode="numeric"
-                          maxLength={6}
-                          onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                          pattern="[0-9]{6}"
-                          required
-                          value={otpCode}
-                        />
-                        <Button disabled={otpCode.length !== 6} loading={otpBusy} type="submit">Verify delivery code</Button>
-                        <Button disabled={otpBusy} loading={otpBusy} onClick={() => void sendDeliveryOtp()} type="button" variant="outline">Resend code</Button>
-                      </form>
-                    )}
+                    <form className="volunteer-otp-form" onSubmit={(event) => void verifyDeliveryOtp(event)}>
+                      <p>Ask the NGO owner for the in-app code and enter it here. The code is generated and displayed only in the NGO dashboard.</p>
+                      <label htmlFor="delivery-otp">Four-digit NGO delivery code</label>
+                      <input
+                        autoComplete="one-time-code"
+                        id="delivery-otp"
+                        inputMode="numeric"
+                        maxLength={4}
+                        onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 4))}
+                        pattern="[0-9]{4}"
+                        required
+                        value={otpCode}
+                      />
+                      <Button disabled={otpCode.length !== 4} loading={otpBusy} type="submit">Verify delivery code</Button>
+                    </form>
                   </>
                 )}
                 {stage === "awaiting_receipt" && (
@@ -630,8 +605,10 @@ export function VolunteerTaskDetailsPage() {
               <Card className="volunteer-action-card" padding="lg">
                 <SectionHeading description={assigned ? "Actions are enabled only for the current backend status." : "Accepting assigns this task to you atomically."} title="Verification and actions" />
                 {assigned && task.status === "confirmed" && <TextareaField hint="Optional note recorded with the pickup handover." label="Pickup note" maxLength={1000} onChange={(event) => setNote(event.target.value)} value={note} />}
-                {stage === "pickup" && <InlineAlert tone="info">After collection is recorded, navigation switches to the NGO drop-off and delivery verification becomes available.</InlineAlert>}
-                {stage === "dropoff" && !otpSent && <InlineAlert tone="info">At the NGO, request a one-time code sent to the verified owner mobile. Delivery is not recorded until the server verifies it.</InlineAlert>}
+                {stage === "pickup" && (isPickupExpired(task.expires_at)
+                  ? <InlineAlert tone="warning">This donation has expired. Pickup confirmation is no longer available; contact the donor or NGO to arrange next steps.</InlineAlert>
+                  : <InlineAlert tone="info">After collection is recorded, navigation switches to the NGO drop-off and delivery verification becomes available.</InlineAlert>)}
+                {stage === "dropoff" && <InlineAlert tone="info">At the NGO, ask the owner to generate the in-app delivery code and tell it to you in person. Delivery is recorded only after server verification.</InlineAlert>}
                 {task.volunteer_delivered_at && task.status !== "completed" && <InlineAlert tone="success" title="Awaiting NGO confirmation">Delivery recorded on {dateLabel(task.volunteer_delivered_at)}. The NGO still needs to confirm receipt.</InlineAlert>}
                 {task.status === "completed" && <InlineAlert tone="success" title="Verified">The organization confirmed receipt.</InlineAlert>}
                 {action && <div className="volunteer-detail-action">{action}</div>}

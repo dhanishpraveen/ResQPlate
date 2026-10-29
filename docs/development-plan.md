@@ -491,9 +491,69 @@ already complete.
   contact, address, and timestamp fields; the prior page rendered them inside
   one dense card and used an isolated sidebar, which caused the apparent empty
   details experience. No backend schema or status transition was changed.
-- Pickup/drop OTP infrastructure and coordinate persistence remain backend
-  dependencies. The page does not fabricate coordinates or claim OTP
-  verification when those capabilities are absent.
+- Location persistence and the secure delivery OTP backend now support the
+  volunteer task flow. In-app OTP deployment and the NGO recovery migration
+  remain required before claiming live delivery verification.
+
+### Donor handover assignment guard
+
+- Live PostgreSQL logs confirmed HTTP 400 / SQLSTATE `P0001` from
+  `confirm_donor_handover`: an assigned volunteer must record pickup. The
+  RPC parameters and frontend payload matched; the donor page's eligibility
+  check omitted the volunteer assignment, despite the volunteer pickup RPC
+  already recording handover atomically.
+- The donor page now reads only the request's volunteer-assigned flag through
+  existing donor RLS and hides the donor confirmation action when a volunteer
+  is assigned. Structured Supabase errors are rendered with sensitive values
+  redacted instead of becoming `[object Object]`. No database change is needed.
+
+### Volunteer pickup expiry feedback
+
+- Live PostgreSQL returned HTTP 400 / SQLSTATE `P0001` with
+  `Pickup cannot be confirmed for this task`. The RPC payload and signature
+  matched (`volunteer_confirm_pickup(p_request_id uuid, p_note text)`); the
+  authenticated volunteer assignment, confirmed request, and claimed donation
+  were valid, but the donation had expired. Expiry is an intentional server
+  prerequisite and is not bypassed.
+- The task detail now labels expired confirmed pickups, disables the
+  collection action, and explains the next step. RPC errors are mapped to
+  actionable safe messages. No database migration or function change is needed.
+
+### In-app delivery OTP milestone
+
+- Replaced the volunteer SMS request with a four-digit OTP verified by the
+  existing trusted `delivery-otp` function. Only the NGO account that owns the
+  pickup request can generate or retrieve its active code; NGO verification
+  status is not required. The volunteer can submit a code but never receives
+  it from the API.
+- The code is HMAC-bound to the request, volunteer, and NGO. An AES-GCM
+  ciphertext enables authorized NGO recovery after refresh; it is cleared when
+  the code is used. Existing expiry, attempt, cooldown, and rate limits remain.
+- Live inspection confirmed the OTP challenge table and issue/verify RPCs
+  exist, but the prior OTP migration is absent from the migration ledger. The
+  encrypted recovery column and NGO-only issue RPC are in a new local
+  migration; neither it nor the updated Edge Function has been deployed.
+- The issue RPC and Edge Function no longer require a verified NGO. Ownership
+  remains bound to the authenticated NGO account and the request's `ngo_id`;
+  a forward migration replaces the RPC for environments where the in-app
+  migration has already been applied.
+- A live generation failure traced to the nested `issue_delivery_otp` RPC,
+  which still rejected unverified NGOs after the wrapper gate was removed.
+  The live picked-up request met its assignment, pickup, pending-review,
+  donation-status, and donor-handover checks. A forward migration replaces
+  that nested RPC while preserving those checks and attempt limits.
+- Live volunteer verification had the matching stale gate in
+  `verify_delivery_otp`: the assigned request had an active, unused challenge
+  and all delivery prerequisites, but the NGO was unverified. A new forward
+  migration removes only that NGO-status check and retains assigned-volunteer,
+  OTP hash, expiry, retry, single-use, and atomic completion checks.
+- Subsequent live 500 logs showed PostgreSQL SQLSTATE `42702`: `verified_at`
+  was ambiguous between a PL/pgSQL variable and challenge column in the
+  successful-OTP update. A forward migration qualifies challenge columns in
+  both challenge updates; no Edge Function change is required.
+- Local verification: 101 tests passed, TypeScript check passed, and the
+  production build passed. Real backend verification and both role-specific
+  screens remain deployment gates.
 
 ### AI surplus workflow audit and ML foundation
 

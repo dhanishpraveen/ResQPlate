@@ -500,6 +500,13 @@
   font-weight: 650;
 }
 
+.volunteer-otp-form p {
+  flex: 1 0 100%;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
 .volunteer-otp-form input {
   width: min(100%, 14rem);
   min-height: 2.75rem;

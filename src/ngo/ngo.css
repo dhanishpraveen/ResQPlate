@@ -301,6 +301,38 @@
   border-top: 1px solid var(--color-border);
 }
 
+.ngo-delivery-otp {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-muted);
+}
+
+.ngo-delivery-otp-active {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+
+.ngo-delivery-otp-active output {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-brand-800);
+  font-size: var(--text-2xl);
+  font-weight: 750;
+  letter-spacing: 0.3em;
+}
+
+.ngo-delivery-otp-active span,
+.ngo-delivery-otp-active p {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
 .ngo-button-link {
   display: inline-flex;
   min-height: 2.625rem;

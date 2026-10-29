@@ -1,13 +1,25 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
+  decryptDeliveryOtp,
+  encryptDeliveryOtp,
   generateNumericOtp,
   hashDeliveryOtp,
   isOtpDatabaseResult,
   otpResultHttpStatus,
   otpResultMessage,
-  sendTwilioSms,
 } from "../_shared/delivery-otp.ts";
-import { deliveryOtpCorsHeaders } from "../_shared/cors.ts";
+import {
+  deliveryOtpCorsHeaders,
+  deliveryOtpPreflightResponse,
+  deliveryOtpResponse,
+} from "../_shared/cors.ts";
+import {
+  deliveryOtpConfigurationError,
+  type DeliveryOtpSettings,
+} from "../_shared/delivery-otp-config.ts";
+import { canManageNgoDeliveryOtp } from "../_shared/delivery-otp-authorization.ts";
+
+type Role = "ngo" | "volunteer";
 
 class DeliveryOtpError extends Error {
   constructor(message: string, readonly status: number) {
@@ -15,18 +27,15 @@ class DeliveryOtpError extends Error {
   }
 }
 
-function response(body: unknown, status = 200, origin: string | null = null) {
-  return new Response(JSON.stringify(body), {
-    headers: { ...deliveryOtpCorsHeaders(origin, configuredOrigins()), "Content-Type": "application/json" },
-    status,
-  });
-}
-
 function configuredOrigins() {
   return (Deno.env.get("CORS_ALLOWED_ORIGINS") ?? "")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+}
+
+function response(body: unknown, status = 200, origin: string | null = null) {
+  return deliveryOtpResponse(body, status, origin, configuredOrigins());
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -39,39 +48,27 @@ function isUuid(value: unknown): value is string {
 }
 
 function configuration() {
-  const url = Deno.env.get("SUPABASE_URL");
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const otpSecret = Deno.env.get("DELIVERY_OTP_HMAC_SECRET");
-  const smsProvider = Deno.env.get("SMS_PROVIDER");
-  const twilioAccountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
-  const twilioAuthToken = Deno.env.get("TWILIO_AUTH_TOKEN");
-  const twilioFromNumber = Deno.env.get("TWILIO_FROM_NUMBER");
-
-  if (!url || !anonKey || !serviceRoleKey || !otpSecret || otpSecret.length < 32) {
-    return { error: "Delivery verification is not configured on the server." } as const;
-  }
-  if (
-    smsProvider !== "twilio"
-    || !twilioAccountSid
-    || !twilioAuthToken
-    || !twilioFromNumber
-  ) {
-    return { error: "SMS delivery is not configured. Contact the application administrator." } as const;
-  }
-
+  const settings: DeliveryOtpSettings = {
+    SUPABASE_URL: Deno.env.get("SUPABASE_URL"),
+    SUPABASE_ANON_KEY: Deno.env.get("SUPABASE_ANON_KEY"),
+    SUPABASE_SERVICE_ROLE_KEY: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+    DELIVERY_OTP_HMAC_SECRET: Deno.env.get("DELIVERY_OTP_HMAC_SECRET"),
+  };
+  const error = deliveryOtpConfigurationError(settings);
+  if (error) return { error } as const;
   return {
-    url,
-    anonKey,
-    serviceRoleKey,
-    otpSecret,
-    twilioAccountSid,
-    twilioAuthToken,
-    twilioFromNumber,
+    url: settings.SUPABASE_URL!,
+    anonKey: settings.SUPABASE_ANON_KEY!,
+    serviceRoleKey: settings.SUPABASE_SERVICE_ROLE_KEY!,
+    otpSecret: settings.DELIVERY_OTP_HMAC_SECRET!,
   } as const;
 }
 
-async function getAssignedRequest(admin: ReturnType<typeof createClient>, requestId: string, volunteerId: string) {
+async function getAssignedRequest(
+  admin: ReturnType<typeof createClient>,
+  requestId: string,
+  volunteerId: string,
+) {
   const { data, error } = await admin
     .from("pickup_requests")
     .select("id, ngo_id, volunteer_id, status, volunteer_picked_up_at, volunteer_delivered_at, delivery_verification_status")
@@ -92,41 +89,99 @@ async function getAssignedRequest(admin: ReturnType<typeof createClient>, reques
   return { data } as const;
 }
 
-async function getNgoVerifiedOwnerPhone(
+async function getNgoDeliveryRequest(
   admin: ReturnType<typeof createClient>,
+  requestId: string,
   ngoId: string,
+  role: Role,
 ) {
-  const { data: ngo, error: ngoError } = await admin
-    .from("ngo_profiles")
-    .select("verification_status")
-    .eq("id", ngoId)
+  const { data, error } = await admin
+    .from("pickup_requests")
+    .select("id, ngo_id, volunteer_id, status, volunteer_picked_up_at, volunteer_delivered_at, delivery_verification_status")
+    .eq("id", requestId)
     .maybeSingle();
-  if (ngoError) throw new Error("The receiving organization could not be verified.");
-  if (!ngo || ngo.verification_status !== "verified") {
-    throw new DeliveryOtpError("The receiving organization must be verified before delivery confirmation.", 409);
+  if (error) throw new Error("The delivery request could not be loaded.");
+  if (!data || !canManageNgoDeliveryOtp(role, ngoId, data.ngo_id)) {
+    throw new DeliveryOtpError("This delivery does not belong to your organization.", 403);
   }
+  if (data.status !== "picked_up"
+    || !data.volunteer_picked_up_at
+    || data.delivery_verification_status !== "pending"
+    || data.volunteer_delivered_at
+    || !data.volunteer_id) {
+    throw new DeliveryOtpError("This delivery is not ready for an NGO verification code.", 409);
+  }
+  return data;
+}
 
-  const { data, error } = await admin.auth.admin.getUserById(ngoId);
-  if (error || !data.user) throw new Error("The verified organization owner account could not be loaded.");
-  const owner = data.user;
-  if (
-    !owner.phone
-    || !owner.phone_confirmed_at
-    || !/^\+[1-9][0-9]{7,14}$/.test(owner.phone)
-  ) {
-    throw new DeliveryOtpError("The organization owner does not have a verified mobile number.", 409);
+async function issueNgoDeliveryOtp(
+  admin: ReturnType<typeof createClient>,
+  requestId: string,
+  ngoId: string,
+  volunteerId: string,
+  secret: string,
+) {
+  const otp = generateNumericOtp();
+  const [otpHash, otpEncrypted] = await Promise.all([
+    hashDeliveryOtp(secret, requestId, volunteerId, ngoId, otp),
+    encryptDeliveryOtp(secret, requestId, ngoId, otp),
+  ]);
+  const now = new Date();
+  const { data, error } = await admin.rpc("issue_delivery_otp_for_ngo", {
+    p_request_id: requestId,
+    p_ngo_owner_id: ngoId,
+    p_otp_hash: otpHash,
+    p_otp_encrypted: otpEncrypted,
+    p_expires_at: new Date(now.getTime() + 10 * 60 * 1000).toISOString(),
+    p_now: now.toISOString(),
+  });
+  if (error) throw new Error("The delivery code could not be generated.");
+  if (!isOtpDatabaseResult(data)) throw new Error("The verification service returned an invalid result.");
+  if (data !== "issued") throw new DeliveryOtpError(otpResultMessage(data), otpResultHttpStatus(data));
+  return { otp, expiresAt: new Date(now.getTime() + 10 * 60 * 1000).toISOString() };
+}
+
+async function getActiveNgoDeliveryOtp(
+  admin: ReturnType<typeof createClient>,
+  requestId: string,
+  ngoId: string,
+  secret: string,
+) {
+  const { data, error } = await admin
+    .from("delivery_otp_challenges")
+    .select("otp_encrypted, expires_at, verified_at, used_at")
+    .eq("request_id", requestId)
+    .eq("ngo_id", ngoId)
+    .maybeSingle();
+  if (error) throw new Error("The delivery code could not be loaded.");
+  if (!data
+    || !data.otp_encrypted
+    || data.verified_at
+    || data.used_at
+    || Date.parse(data.expires_at) <= Date.now()) {
+    return { ok: true, active: false } as const;
   }
-  return owner.phone;
+  const otp = await decryptDeliveryOtp(secret, requestId, ngoId, data.otp_encrypted);
+  return { ok: true, active: true, otp, expires_at: data.expires_at } as const;
 }
 
 Deno.serve(async (request) => {
+  try {
+    return await handleDeliveryRequest(request);
+  } catch {
+    return response(
+      { error: "Delivery verification could not be completed." },
+      500,
+      request.headers.get("origin"),
+    );
+  }
+});
+
+async function handleDeliveryRequest(request: Request) {
   const origin = request.headers.get("origin");
   const respond = (body: unknown, status = 200) => response(body, status, origin);
   if (request.method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
-      headers: deliveryOtpCorsHeaders(origin, configuredOrigins()),
-    });
+    return deliveryOtpPreflightResponse(origin, configuredOrigins());
   }
   if (origin && !new Headers(deliveryOtpCorsHeaders(origin, configuredOrigins())).has("Access-Control-Allow-Origin")) {
     return respond({ error: "This application origin is not allowed." }, 403);
@@ -135,7 +190,6 @@ Deno.serve(async (request) => {
 
   const authorization = request.headers.get("Authorization");
   if (!authorization) return respond({ error: "Authentication is required." }, 401);
-
   const config = configuration();
   if ("error" in config) return respond({ error: config.error }, 503);
 
@@ -154,8 +208,7 @@ Deno.serve(async (request) => {
     .select("role")
     .eq("id", authData.user.id)
     .maybeSingle();
-  if (profileError) return respond({ error: "Volunteer authorization could not be verified." }, 500);
-  if (profile?.role !== "volunteer") return respond({ error: "A volunteer account is required." }, 403);
+  if (profileError) return respond({ error: "Account authorization could not be verified." }, 500);
 
   let body: Record<string, unknown>;
   try {
@@ -165,59 +218,42 @@ Deno.serve(async (request) => {
   } catch {
     return respond({ error: "The request body must be valid JSON." }, 400);
   }
-
   if (!isUuid(body.request_id)) return respond({ error: "A valid request ID is required." }, 400);
-  if (body.action !== "send" && body.action !== "verify") {
-    return respond({ error: "Choose a supported delivery verification action." }, 400);
+
+  const role = profile?.role as Role | null;
+  if (role === "ngo" && (body.action === "ngo_get" || body.action === "ngo_issue")) {
+    try {
+      const delivery = await getNgoDeliveryRequest(admin, body.request_id, authData.user.id, role);
+      if (body.action === "ngo_get") {
+        return respond(await getActiveNgoDeliveryOtp(admin, delivery.id, authData.user.id, config.otpSecret));
+      }
+      const issued = await issueNgoDeliveryOtp(
+        admin,
+        delivery.id,
+        authData.user.id,
+        delivery.volunteer_id,
+        config.otpSecret,
+      );
+      return respond({ ok: true, active: true, otp: issued.otp, expires_at: issued.expiresAt });
+    } catch (error) {
+      if (error instanceof DeliveryOtpError) return respond({ error: error.message }, error.status);
+      return respond({ error: "The NGO delivery code could not be managed." }, 500);
+    }
+  }
+
+  if (role !== "volunteer") {
+    return respond({ error: "This action is not authorized for your account." }, 403);
+  }
+  if (body.action !== "verify") {
+    return respond({ error: "Choose an authorized delivery verification action." }, 400);
+  }
+  if (typeof body.otp !== "string" || !/^\d{4}$/.test(body.otp)) {
+    return respond({ error: "Enter the four-digit NGO delivery code." }, 400);
   }
 
   try {
     const assigned = await getAssignedRequest(admin, body.request_id, authData.user.id);
     if ("error" in assigned) return respond({ error: assigned.error }, assigned.status);
-
-    if (body.action === "send") {
-      const toNumber = await getNgoVerifiedOwnerPhone(admin, assigned.data.ngo_id);
-      const otp = generateNumericOtp();
-      const otpHash = await hashDeliveryOtp(
-        config.otpSecret,
-        body.request_id,
-        authData.user.id,
-        assigned.data.ngo_id,
-        otp,
-      );
-      const now = new Date();
-      const { data: issueResult, error: issueError } = await admin.rpc("issue_delivery_otp", {
-        p_request_id: body.request_id,
-        p_volunteer_id: authData.user.id,
-        p_otp_hash: otpHash,
-        p_expires_at: new Date(now.getTime() + 10 * 60 * 1000).toISOString(),
-        p_now: now.toISOString(),
-      });
-      if (issueError) return respond({ error: "The verification code could not be issued." }, 500);
-      if (!isOtpDatabaseResult(issueResult)) {
-        return respond({ error: "The verification service returned an invalid result." }, 500);
-      }
-      if (issueResult !== "issued") {
-        return respond({ error: otpResultMessage(issueResult) }, otpResultHttpStatus(issueResult));
-      }
-
-      try {
-        await sendTwilioSms(
-          config.twilioAccountSid,
-          config.twilioAuthToken,
-          config.twilioFromNumber,
-          toNumber,
-          `ResQPlate delivery verification code: ${otp}. It expires in 10 minutes. Do not share it with anyone other than the volunteer at handover.`,
-        );
-      } catch {
-        return respond({ error: "The SMS provider could not deliver the code. Wait before requesting another code." }, 502);
-      }
-      return respond({ ok: true });
-    }
-
-    if (typeof body.otp !== "string" || !/^\d{6}$/.test(body.otp)) {
-      return respond({ error: "Enter the six-digit NGO verification code." }, 400);
-    }
     const otpHash = await hashDeliveryOtp(
       config.otpSecret,
       body.request_id,
@@ -239,8 +275,7 @@ Deno.serve(async (request) => {
       return respond({ error: otpResultMessage(verificationResult) }, otpResultHttpStatus(verificationResult));
     }
     return respond({ ok: true });
-  } catch (error) {
-    if (error instanceof DeliveryOtpError) return respond({ error: error.message }, error.status);
+  } catch {
     return respond({ error: "Delivery verification could not be completed." }, 500);
   }
-});
+}

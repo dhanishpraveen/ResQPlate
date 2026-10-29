@@ -20,3 +20,29 @@ export function deliveryOtpCorsHeaders(
     "Vary": "Origin, Access-Control-Request-Headers",
   };
 }
+
+export function deliveryOtpResponse(
+  body: unknown,
+  status: number,
+  origin: string | null,
+  configuredOrigins: readonly string[] = [],
+): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...deliveryOtpCorsHeaders(origin, configuredOrigins),
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json",
+    },
+  });
+}
+
+export function deliveryOtpPreflightResponse(
+  origin: string | null,
+  configuredOrigins: readonly string[] = [],
+): Response {
+  return new Response(null, {
+    status: 204,
+    headers: deliveryOtpCorsHeaders(origin, configuredOrigins),
+  });
+}

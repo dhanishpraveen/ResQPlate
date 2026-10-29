@@ -4,6 +4,7 @@ import type { Database } from "../lib/database.types";
 export type DonationRow = Database["public"]["Tables"]["donations"]["Row"];
 export type PickupRequestRow = Database["public"]["Views"]["donor_pickup_request_details"]["Row"];
 export type CompletedImpactRow = Database["public"]["Views"]["donor_completed_impact"]["Row"];
+export type PickupRequestStatus = Database["public"]["Tables"]["pickup_requests"]["Row"]["status"];
 type Client = SupabaseClient<Database>;
 
 type DonationSaveError = {
@@ -40,6 +41,8 @@ function safeErrorText(value: unknown): string | null {
     .replace(/\beyJ[\w-]*\.[\w-]+\.[\w-]+\b/g, "[redacted token]")
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted email]")
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, "[redacted id]")
+    .replace(/\b[0-9a-f]{64}\b/gi, "[redacted hash]")
+    .replace(/(?<!\w)\+?\d[\d\s().-]{7,}\d(?!\w)/g, "[redacted phone]")
     .slice(0, 500);
 }
 
@@ -61,6 +64,25 @@ export function formatDonationSaveError(error: unknown): string {
   ].filter((part): part is string => Boolean(part));
 
   return summary.join(" — ") || "Could not save the donation.";
+}
+
+export function formatSupabaseError(error: unknown): string {
+  const fields = typeof error === "object" && error !== null
+    ? error as DonationSaveError
+    : { message: error };
+  const code = safeErrorText(fields.code);
+  const message = safeErrorText(fields.message);
+  return [code ? `Code: ${code}` : null, message]
+    .filter((part): part is string => Boolean(part))
+    .join(" — ") || "The request could not be completed.";
+}
+
+export function canConfirmDonorHandover(
+  requestStatus: PickupRequestStatus,
+  donationStatus: DonationRow["status"],
+  volunteerAssigned: boolean,
+): boolean {
+  return requestStatus === "confirmed" && donationStatus === "claimed" && !volunteerAssigned;
 }
 
 export async function createDonation(client: Client, donorId: string, values: DonationWriteValues) {
@@ -90,6 +112,17 @@ export async function fetchPickupRequests(client: Client) {
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data;
+}
+
+export async function fetchPickupRequestVolunteerAssignment(client: Client, requestId: string) {
+  const { data, error } = await client
+    .from("pickup_requests")
+    .select("volunteer_id")
+    .eq("id", requestId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("This pickup request is unavailable or not related to your donations.");
+  return data.volunteer_id !== null;
 }
 
 export { fetchSignedImages } from "../lib/storage";
