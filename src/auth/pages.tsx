@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, CheckCircle2, HeartHandshake, Leaf } from "lucide-react";
 import { AuthLayout } from "../components/layout";
 import { Button, Checkbox, InlineAlert, LoadingState, SelectField, StatusBadge, TextField, TextareaField } from "../components/ui";
 import type { UserRole } from "../components/navigation";
 import { useAuth, roleHome } from "./AuthContext";
-import { callbackDestination, getMissingNgoOrganizationDetails, getMissingNgoProfileDetails, isE164Phone, validateProfileImage } from "./validation";
+import { callbackDestination, getMissingNgoOrganizationDetails, getMissingNgoProfileDetails, isE164Phone, roleDestination, validateProfileImage } from "./validation";
 import { supabase, supabaseConfigurationError } from "../lib/supabase";
 
 type AuthLocationState = { from?: { pathname?: string } };
@@ -99,10 +99,10 @@ export function SignUpPage({ role: presetRole }: { role?: UserRole }) {
     });
     setBusy(false);
     if (signUpError) { setError(signUpError.message); return; }
-    if (data.session) {
-      navigate(role === "ngo" ? "/onboarding/ngo/organization" : "/onboarding/profile", { replace: true });
+    if (data.session && data.session.user?.email_confirmed_at !== null) {
+      navigate(roleDestination(role), { replace: true });
     } else {
-      navigate(`/email-sent?email=${encodeURIComponent(email.trim())}`, { replace: true });
+      navigate(`/verify-email?email=${encodeURIComponent(email.trim())}`, { replace: true });
     }
   }
 
@@ -135,35 +135,136 @@ export function SignUpPage({ role: presetRole }: { role?: UserRole }) {
 export function EmailSentPage() {
   const [params] = useSearchParams();
   const email = params.get("email") ?? "";
+  const navigate = useNavigate();
+  const [otp, setOtp] = useState("");
+  const otpInputs = useRef<Array<HTMLInputElement | null>>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(60);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = window.setInterval(() => setResendCooldown((current) => Math.max(0, current - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [resendCooldown]);
+
+  function updateOtp(value: string, index: number) {
+    const digits = value.replace(/\D/g, "").slice(0, 1);
+    const next = otp.split("");
+    next[index] = digits;
+    const normalized = Array.from({ length: 8 }, (_, position) => next[position] ?? "").join("");
+    setOtp(normalized);
+    setError(null);
+    setMessage(null);
+    if (digits && index < 7) otpInputs.current[index + 1]?.focus();
+  }
+
+  function pasteOtp(value: string, index: number) {
+    const digits = value.replace(/\D/g, "").slice(0, 8);
+    if (!digits) return;
+    const start = digits.length === 8 ? 0 : index;
+    const next = Array.from({ length: 8 }, (_, position) => otp[position] ?? "");
+    digits.split("").forEach((digit, offset) => {
+      if (start + offset < 8) next[start + offset] = digit;
+    });
+    setOtp(next.join(""));
+    setError(null);
+    setMessage(null);
+    otpInputs.current[Math.min(start + digits.length, 7)]?.focus();
+  }
+
+  function handleOtpKeyDown(event: KeyboardEvent<HTMLInputElement>, index: number) {
+    if (event.key === "Backspace" && !otp[index] && index > 0) {
+      event.preventDefault();
+      otpInputs.current[index - 1]?.focus();
+      return;
+    }
+    if (event.key === "ArrowLeft" && index > 0) {
+      event.preventDefault();
+      otpInputs.current[index - 1]?.focus();
+    } else if (event.key === "ArrowRight" && index < 7) {
+      event.preventDefault();
+      otpInputs.current[index + 1]?.focus();
+    }
+  }
+
+  async function verify(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase) { setError(supabaseConfigurationError); return; }
+    if (!email) { setError("The email address is missing. Return to registration and try again."); return; }
+    if (otp.length !== 8 || /\D/.test(otp)) { setError("Enter the eight-digit verification code from your email."); return; }
+    setBusy(true);
+    setError(null);
+    const { data, error: verifyError } = await supabase.auth.verifyOtp({ email, token: otp, type: "signup" });
+    setBusy(false);
+    if (verifyError) {
+      setError("That code is invalid, expired, or already used. Request a new code and try again.");
+      return;
+    }
+    const role = data.user?.user_metadata.role as UserRole | undefined;
+    navigate(roleDestination(role ?? null), { replace: true });
+  }
 
   async function resend() {
     if (!supabase) { setError(supabaseConfigurationError); return; }
     if (!email) { setError("The email address is missing. Return to registration and try again."); return; }
+    if (resendCooldown > 0 || busy) return;
     setBusy(true);
     setError(null);
+    setMessage(null);
     const { error: resendError } = await supabase.auth.resend({
       type: "signup",
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
     setBusy(false);
     if (resendError) setError(resendError.message);
-    else setMessage("A new confirmation email has been sent.");
+    else {
+      setOtp("");
+      setResendCooldown(60);
+      setMessage("A new eight-digit verification code has been sent.");
+    }
   }
 
   return (
-    <AuthLayout subtitle="Use the secure link in your inbox to confirm your email and continue." title="Check Your Email">
-      <div className="auth-form-stack">
+    <AuthLayout subtitle="Enter the one-time code from your inbox to continue." title="Verify Your Email">
+      <form className="auth-form-stack" onSubmit={(event) => void verify(event)}>
         <div className="auth-feature-icon"><CheckCircle2 aria-hidden="true" size={24} /></div>
-        <p>We sent a confirmation link to <strong>{email || "your email address"}</strong>. The link returns you to ResQPlate to finish setting up your account.</p>
+        <p>We sent an eight-digit verification code to <strong>{email || "your email address"}</strong>.</p>
         {message && <InlineAlert tone="success" title="Email sent">{message}</InlineAlert>}
         <AuthFormError value={error} />
-        <Button loading={busy} onClick={() => void resend()} type="button" variant="outline">Resend confirmation email</Button>
+        <fieldset className="auth-otp-fieldset">
+          <legend className="ui-label">Verification code</legend>
+          <div aria-label="Eight-digit verification code" className="auth-otp-inputs">
+            {Array.from({ length: 8 }, (_, index) => (
+              <input
+                aria-label={`Verification digit ${index + 1}`}
+                autoComplete={index === 0 ? "one-time-code" : "off"}
+                className="auth-otp-input"
+                inputMode="numeric"
+                key={index}
+                maxLength={1}
+                onChange={(event) => updateOtp(event.target.value, index)}
+                onKeyDown={(event) => handleOtpKeyDown(event, index)}
+                onPaste={(event) => {
+                  event.preventDefault();
+                  pasteOtp(event.clipboardData.getData("text"), index);
+                }}
+                pattern="[0-9]"
+                ref={(element) => { otpInputs.current[index] = element; }}
+                required
+                type="text"
+                value={otp[index] ?? ""}
+              />
+            ))}
+          </div>
+        </fieldset>
+        <Button disabled={otp.length !== 8 || /\D/.test(otp)} loading={busy} type="submit">Verify email</Button>
+        <Button disabled={busy || resendCooldown > 0} onClick={() => void resend()} type="button" variant="outline">
+          {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend OTP"}
+        </Button>
         <AuthFooter><Link to="/">Back to sign in</Link></AuthFooter>
-      </div>
+      </form>
     </AuthLayout>
   );
 }

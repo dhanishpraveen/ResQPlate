@@ -69,6 +69,7 @@ export function App() {
         <Route element={<SignUpPage />} path="/sign-up" />
         <Route element={<SignUpPage role="volunteer" />} path="/volunteer-sign-up" />
         <Route element={<EmailSentPage />} path="/email-sent" />
+        <Route element={<EmailSentPage />} path="/verify-email" />
         <Route element={<LogoutPage />} path="/logout" />
         <Route element={<ResetPasswordPage />} path="/reset-password" />
         <Route element={<ResetPasswordPage update />} path="/reset-password/update" />

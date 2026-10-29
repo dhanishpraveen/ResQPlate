@@ -15,6 +15,7 @@ export function HomeRoute() {
   const { session, profile, loading, profileError } = useAuth();
   if (loading) return <AuthLayout title="Opening ResQPlate"><LoadingState label="Restoring your secure session" /></AuthLayout>;
   if (!session) return <Navigate replace to="/sign-in" />;
+  if (session.user.email_confirmed_at === null) return <Navigate replace to={`/verify-email?email=${encodeURIComponent(session.user.email ?? "")}`} />;
   if (profileError) {
     return (
       <AuthLayout title="Account profile unavailable">
@@ -36,6 +37,7 @@ export function RequireAccount({ role }: { role?: UserRole }) {
 
   if (loading) return <AuthLayout title="Opening ResQPlate"><LoadingState label="Loading your account and permissions" /></AuthLayout>;
   if (!session) return <Navigate replace state={{ from: location }} to="/sign-in" />;
+  if (session.user.email_confirmed_at === null) return <Navigate replace to={`/verify-email?email=${encodeURIComponent(session.user.email ?? "")}`} />;
   if (profileError) {
     return (
       <AuthLayout title="Account profile unavailable">

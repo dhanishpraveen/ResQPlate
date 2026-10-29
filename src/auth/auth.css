@@ -121,6 +121,52 @@
   color: var(--color-success);
 }
 
+.auth-otp-fieldset {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.auth-otp-inputs {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.auth-otp-input {
+  width: 100%;
+  min-width: 0;
+  height: 3rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  text-align: center;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.auth-otp-input:focus {
+  outline: 0;
+  border-color: var(--color-brand-600);
+  box-shadow: 0 0 0 3px var(--color-brand-100);
+}
+
+@media (max-width: 420px) {
+  .auth-otp-inputs {
+    gap: 0.3rem;
+  }
+
+  .auth-otp-input {
+    height: 2.7rem;
+    font-size: var(--text-md);
+  }
+}
+
 .auth-stepper {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
