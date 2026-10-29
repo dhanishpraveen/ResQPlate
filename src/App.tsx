@@ -15,6 +15,7 @@ import {
 import {
   DonorDashboardPage,
   DonorImpactPage,
+  DonorForecastPage,
   DonationDetailsPage,
   DonationFormPage,
   MyDonationsPage,
@@ -81,6 +82,7 @@ export function App() {
           <Route element={<RequireAccount role="donor" />}>
             <Route element={<DonorOnboardingPage />} path="/onboarding/donor" />
             <Route element={<DonorDashboardPage />} path="/donor" />
+            <Route element={<DonorForecastPage />} path="/donor/forecast" />
             <Route element={<DonationFormPage />} path="/donor/donations/new" />
             <Route element={<DonationFormPage />} path="/donor/donations/:donationId/edit" />
             <Route element={<DonationDetailsPage />} path="/donor/donations/:donationId" />

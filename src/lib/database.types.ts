@@ -124,6 +124,80 @@ type VolunteerTask = {
   volunteer_delivered_at: string | null;
 };
 
+type SurplusForecast = {
+  id: string;
+  donor_id: string;
+  food_category: string;
+  restaurant_type: string;
+  planned_quantity: number;
+  expected_customers: number;
+  historical_sales: number;
+  historical_leftover: number;
+  ready_at: string;
+  predicted_quantity: number;
+  uncertainty_lower: number;
+  uncertainty_upper: number;
+  unit: string;
+  model_version: string;
+  status: "estimated" | "confirmed" | "ready" | "cancelled";
+  confirmed_quantity: number | null;
+  actual_ready_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type NgoDemandRequirement = {
+  id: string;
+  ngo_id: string;
+  food_category: string;
+  dietary_constraints: string | null;
+  required_quantity: number;
+  unit: string;
+  required_by: string;
+  delivery_address: string;
+  status: "active" | "fulfilled" | "cancelled" | "expired";
+  created_at: string;
+  updated_at: string;
+};
+
+type MatchRecommendation = {
+  id: string;
+  demand_id: string;
+  forecast_id: string | null;
+  donation_id: string | null;
+  is_feasible: boolean;
+  allocatable_quantity: number;
+  score: number;
+  explanation: string[];
+  created_at: string;
+};
+
+type QuantityAllocation = {
+  id: string;
+  demand_id: string;
+  forecast_id: string | null;
+  donation_id: string | null;
+  quantity: number;
+  unit: string;
+  status: "reserved" | "released" | "fulfilled";
+  idempotency_key: string;
+  reserved_at: string;
+  released_at: string | null;
+  fulfilled_at: string | null;
+};
+
+type NotificationEvent = {
+  id: string;
+  recipient_id: string;
+  event_key: string;
+  event_type: string;
+  payload: Json;
+  status: "pending" | "sent" | "failed";
+  sent_at: string | null;
+  read_at: string | null;
+  created_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -174,6 +248,21 @@ export type Database = {
         never,
         never
       >;
+      surplus_forecasts: Table<
+        SurplusForecast,
+        Pick<SurplusForecast, "donor_id" | "food_category" | "restaurant_type" | "planned_quantity" | "expected_customers" | "historical_sales" | "historical_leftover" | "ready_at" | "predicted_quantity" | "uncertainty_lower" | "uncertainty_upper" | "unit" | "model_version"> &
+          Partial<Pick<SurplusForecast, "status" | "confirmed_quantity" | "actual_ready_at">>,
+        Partial<Pick<SurplusForecast, "food_category" | "restaurant_type" | "planned_quantity" | "expected_customers" | "historical_sales" | "historical_leftover" | "ready_at" | "status" | "confirmed_quantity" | "actual_ready_at">>
+      >;
+      ngo_demand_requirements: Table<
+        NgoDemandRequirement,
+        Pick<NgoDemandRequirement, "ngo_id" | "food_category" | "required_quantity" | "unit" | "required_by" | "delivery_address"> &
+          Partial<Pick<NgoDemandRequirement, "dietary_constraints" | "status">>,
+        Partial<Pick<NgoDemandRequirement, "food_category" | "dietary_constraints" | "required_quantity" | "unit" | "required_by" | "delivery_address" | "status">>
+      >;
+      match_recommendations: Table<MatchRecommendation, never, never>;
+      quantity_allocations: Table<QuantityAllocation, never, never>;
+      notification_events: Table<NotificationEvent, never, never>;
     };
     Views: {
       donor_pickup_request_details: {
@@ -256,6 +345,14 @@ export type Database = {
       };
       volunteer_confirm_delivery: {
         Args: { p_request_id: string };
+        Returns: undefined;
+      };
+      reserve_donation_quantity: {
+        Args: { p_demand_id: string; p_donation_id: string; p_quantity: number; p_idempotency_key: string };
+        Returns: string;
+      };
+      release_quantity_allocation: {
+        Args: { p_allocation_id: string };
         Returns: undefined;
       };
     };

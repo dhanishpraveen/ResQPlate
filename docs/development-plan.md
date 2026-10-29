@@ -495,6 +495,41 @@ already complete.
   dependencies. The page does not fabricate coordinates or claim OTP
   verification when those capabilities are absent.
 
+### AI surplus workflow audit and ML foundation
+
+- Audited the current schema and repository: no historical sales/leftover
+  dataset, forecast/demand/allocation/notification tables, map coordinates,
+  delivery OTP backend, or Python service exists.
+- Added a standalone Random Forest surplus-prediction service under
+  `ml_service/` with strict validation, persisted model loading, uncertainty
+  bounds, time-ordered evaluation, and a clearly labelled synthetic
+  development dataset.
+- Development-only evaluation produced MAE 11.525 and RMSE 16.516 versus a
+  simple baseline MAE of 35.244; these figures are not production accuracy.
+- Added and applied an additive migration for forecast persistence, NGO
+  demand, explainable recommendations, quantity reservations, notification
+  events, RLS, and idempotent reservation/release RPCs. Added a matching
+  engine and `POST /match` service endpoint.
+- Frontend persistence is available through the new gateway source, pending
+  deployment; real historical data is still required for production model
+  accuracy.
+
+### Donor AI prediction UI milestone
+
+- Added the donor-only `/donor/forecast` route and a visible dashboard card.
+  The form collects category, restaurant type, planned quantity, expected
+  customers, historical sales/leftovers, and future ready time.
+- Added the `predict-surplus` Edge Function as the authenticated gateway to
+  FastAPI. It verifies the donor role, calls the existing prediction endpoint,
+  and inserts the estimate into `surplus_forecasts` through RLS.
+- The result is explicitly labelled as an estimate, includes uncertainty,
+  unit, ready time, and model version, and does not publish a donation.
+  Donors can continue to the existing confirmed donation form for review.
+- Previous donor-owned forecasts, loading/error states, and a no-history-input
+  state are shown. The feature requires deployment of the Edge Function and
+  `ML_SERVICE_URL`; production accuracy remains limited by synthetic training
+  data until real historical records are supplied.
+
 ## Phase 6: Shared functionality
 
 - **Objectives:** messaging, notifications, shared profile patterns, settings,

@@ -15,6 +15,7 @@ import {
   Salad,
   Utensils,
   UsersRound,
+  BrainCircuit,
 } from "lucide-react";
 import { AppShell, PageHeader } from "../components/layout";
 import {
@@ -48,6 +49,8 @@ import {
 } from "./data";
 import { calculateDonorImpact, displayedDonationStatus, formatQuantity, monthlyCompletedSummary } from "./metrics";
 import { validateDonation, validateFoodImage, type DonationDraft } from "./validation";
+import { listDonorForecasts, type ForecastPrediction } from "../ai/data";
+import { predictSurplus } from "../ai/api";
 
 type LoadState<T> = { data: T; error: null; loading: false } | { data: null; error: string; loading: false } | { data: null; error: null; loading: true };
 
@@ -205,6 +208,17 @@ export function DonorDashboardPage() {
           <div aria-hidden="true" className="donor-promo-art"><Salad size={84} strokeWidth={1.2} /><Leaf className="donor-promo-leaf" size={54} strokeWidth={1.4} /></div>
         </section>
 
+        <Card className="donor-ai-card" padding="lg">
+          <div className="donor-ai-card-copy">
+            <span className="donor-ai-icon"><BrainCircuit aria-hidden="true" size={22} /></span>
+            <div>
+              <h2>AI Food Surplus Prediction</h2>
+              <p>Estimate potential surplus before publishing a confirmed donation. Predictions never create or publish food automatically.</p>
+            </div>
+          </div>
+          <Link className="donor-primary-link" to="/donor/forecast">Predict food surplus <ArrowRight aria-hidden="true" size={15} /></Link>
+        </Card>
+
         <div className="donor-dashboard-lower">
           <Card className="donor-dashboard-card" padding="md">
             <SectionHeading
@@ -232,6 +246,175 @@ export function DonorDashboardPage() {
         {!impact.loading && !impact.error && <InlineAlert tone="info" title="Impact measurement">
           People fed and CO₂ reduction remain unavailable until verified recipient counts and an approved emissions factor are defined. No estimates are shown.
         </InlineAlert>}
+      </div>
+    </DonorShell>
+  );
+}
+
+type ForecastForm = {
+  food_category: string;
+  restaurant_type: string;
+  planned_quantity: string;
+  expected_customers: string;
+  historical_sales: string;
+  historical_leftover: string;
+  ready_at: string;
+};
+
+const forecastCategories = [
+  { value: "prepared_meal", label: "Prepared meal" },
+  { value: "bakery", label: "Bakery" },
+  { value: "produce", label: "Produce" },
+  { value: "salad", label: "Salad" },
+  { value: "sandwich", label: "Sandwich" },
+];
+
+const restaurantTypes = [
+  { value: "restaurant", label: "Restaurant" },
+  { value: "cafe", label: "Cafe" },
+  { value: "caterer", label: "Caterer" },
+];
+
+function forecastDateLabel(value: string) {
+  return dateLabel(value ? new Date(value).toISOString() : null);
+}
+
+export function DonorForecastPage() {
+  const { session } = useAuth();
+  const navigate = useNavigate();
+  const [form, setForm] = useState<ForecastForm>({
+    food_category: "prepared_meal",
+    restaurant_type: "restaurant",
+    planned_quantity: "",
+    expected_customers: "",
+    historical_sales: "",
+    historical_leftover: "",
+    ready_at: "",
+  });
+  const [prediction, setPrediction] = useState<ForecastPrediction | null>(null);
+  const [forecasts, setForecasts] = useState<Awaited<ReturnType<typeof listDonorForecasts>>>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const loadForecasts = useCallback(async () => {
+    if (!supabase || !session) {
+      setLoadingHistory(false);
+      return;
+    }
+    try {
+      setForecasts(await listDonorForecasts(supabase));
+    } catch (cause) {
+      setError(messageOf(cause));
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, [session]);
+
+  useEffect(() => { void loadForecasts(); }, [loadForecasts]);
+
+  function update<Key extends keyof ForecastForm>(key: Key, value: ForecastForm[Key]) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!supabase || !session || busy) {
+      setError(supabaseConfigurationError ?? "Sign in as a donor to create a forecast.");
+      return;
+    }
+    const plannedQuantity = Number(form.planned_quantity);
+    const expectedCustomers = Number(form.expected_customers);
+    const historicalSales = Number(form.historical_sales);
+    const historicalLeftover = Number(form.historical_leftover);
+    const readyDate = new Date(form.ready_at);
+    if (!form.ready_at || Number.isNaN(readyDate.getTime()) || readyDate <= new Date()) {
+      setError("Choose a future ready date and time.");
+      return;
+    }
+    if (![plannedQuantity, expectedCustomers, historicalSales, historicalLeftover].every(Number.isFinite) || plannedQuantity <= 0 || expectedCustomers < 0 || historicalSales < 0 || historicalLeftover < 0) {
+      setError("Enter valid non-negative history values and a planned quantity greater than zero.");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setSuccess(null);
+    setPrediction(null);
+    try {
+      const input = {
+        food_category: form.food_category,
+        restaurant_type: form.restaurant_type,
+        planned_quantity: plannedQuantity,
+        expected_customers: expectedCustomers,
+        historical_sales: historicalSales,
+        historical_leftover: historicalLeftover,
+        ready_at: readyDate.toISOString(),
+      };
+      const result = await predictSurplus(supabase, input);
+      setPrediction(result.prediction);
+      setSuccess("Forecast saved as an estimate. It has not been published as a donation.");
+      await loadForecasts();
+    } catch (cause) {
+      setError(messageOf(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <DonorShell
+      activeLabel="Dashboard"
+      action={<Button icon={<ArrowLeft size={16} />} onClick={() => navigate("/donor")} variant="outline">Back to dashboard</Button>}
+      description="Use your planning inputs to estimate potential surplus before confirming a donation."
+      title="AI Food Surplus Prediction"
+    >
+      <div className="donor-forecast-layout">
+        <main className="donor-forecast-main">
+          {error && <ErrorState description={error} />}
+          {success && <InlineAlert tone="success">{success}</InlineAlert>}
+          <Card padding="lg">
+            <SectionHeading description="The current model requires sales and leftover history inputs. Use real, unit-consistent records for meaningful estimates." title="Prediction inputs" />
+            <form className="donor-form-fields" onSubmit={(event) => void submit(event)}>
+              <SelectField label="Food category" onChange={(event) => update("food_category", event.target.value)} options={forecastCategories} required value={form.food_category} />
+              <SelectField label="Restaurant type" onChange={(event) => update("restaurant_type", event.target.value)} options={restaurantTypes} required value={form.restaurant_type} />
+              <TextField label="Planned preparation quantity" min="0.001" onChange={(event) => update("planned_quantity", event.target.value)} required step="0.001" type="number" value={form.planned_quantity} />
+              <TextField label="Expected customers / orders" min="0" onChange={(event) => update("expected_customers", event.target.value)} required step="1" type="number" value={form.expected_customers} />
+              <TextField hint="Required by the current model; enter 0 only when you have no recorded sales history." label="Historical sales" min="0" onChange={(event) => update("historical_sales", event.target.value)} required step="0.001" type="number" value={form.historical_sales} />
+              <TextField hint="Required by the current model; enter 0 only when you have no recorded leftover history." label="Historical leftover" min="0" onChange={(event) => update("historical_leftover", event.target.value)} required step="0.001" type="number" value={form.historical_leftover} />
+              <TextField className="donor-form-wide" label="Expected food-ready date and time" onChange={(event) => update("ready_at", event.target.value)} required type="datetime-local" value={form.ready_at} />
+              {(form.historical_sales === "" || form.historical_leftover === "") && <div className="donor-form-wide"><InlineAlert tone="info">No history data is entered yet. The prediction cannot run until the required model inputs are provided.</InlineAlert></div>}
+              <div className="donor-form-actions donor-form-wide">
+                <Button disabled={busy || form.historical_sales === "" || form.historical_leftover === ""} loading={busy} type="submit">{busy ? "Predicting…" : "Predict Food Surplus"}</Button>
+                <Link className="donor-text-link" to="/donor/donations/new">Create a confirmed donation instead <ArrowRight size={15} /></Link>
+              </div>
+            </form>
+          </Card>
+          {prediction && <Card className="donor-forecast-result" padding="lg">
+            <StatusBadge tone="info">Estimate only</StatusBadge>
+            <SectionHeading description="This result is not confirmed food availability and does not reserve or publish any donation." title="Predicted surplus" />
+            <strong className="donor-forecast-quantity">{prediction.predicted_quantity.toLocaleString()} {prediction.unit}</strong>
+            <p>Estimated range: {prediction.uncertainty.lower.toLocaleString()}–{prediction.uncertainty.upper.toLocaleString()} {prediction.unit}</p>
+            <div className="donor-forecast-meta"><span>Ready {forecastDateLabel(form.ready_at)}</span><span>Model {prediction.model_version}</span></div>
+            <Button icon={<Plus size={16} />} onClick={() => navigate("/donor/donations/new", { state: { forecast: prediction.predicted_quantity } })}>Review confirmed donation</Button>
+          </Card>}
+        </main>
+        <aside>
+          <Card padding="lg">
+            <SectionHeading description="Only your forecasts are shown here." title="Previous forecasts" />
+            {loadingHistory ? <LoadingState label="Loading forecasts" /> : forecasts.length === 0
+              ? <EmptyState description="Saved estimates will appear after a successful prediction." title="No forecasts yet" />
+              : <div className="donor-forecast-history">{forecasts.slice(0, 5).map((forecast) => (
+                <div className="donor-forecast-history-row" key={forecast.id}>
+                  <strong>{forecast.predicted_quantity.toLocaleString()} {forecast.unit}</strong>
+                  <span>{forecast.food_category.replaceAll("_", " ")} · {forecast.status}</span>
+                  <small>{dateLabel(forecast.created_at)}</small>
+                </div>
+              ))}</div>}
+          </Card>
+          <InlineAlert tone="info" title="No production history yet">The bundled model was evaluated on synthetic development data. Replace it with real restaurant history before relying on forecasts operationally.</InlineAlert>
+        </aside>
       </div>
     </DonorShell>
   );

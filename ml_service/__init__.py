@@ -1,0 +1,1 @@
+"""ResQPlate surplus prediction service."""
