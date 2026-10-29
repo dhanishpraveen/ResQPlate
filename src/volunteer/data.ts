@@ -38,3 +38,11 @@ export function taskStatusLabel(status: VolunteerTask["status"]) {
   if (status === "completed") return "Delivered";
   return status.replaceAll("_", " ");
 }
+
+export function taskDeliveryLabel(task: VolunteerTask) {
+  if (task.status === "completed") return "Verified";
+  if (task.volunteer_delivered_at) return "Awaiting NGO confirmation";
+  if (task.volunteer_picked_up_at) return "In transit";
+  if (task.status === "confirmed") return "Pickup pending";
+  return taskStatusLabel(task.status);
+}

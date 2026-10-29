@@ -37,6 +37,7 @@ import {
   fetchVolunteerTasks,
   isAssignedVolunteerTask,
   taskStatusLabel,
+  taskDeliveryLabel,
   type VolunteerTask,
 } from "./data";
 
@@ -121,6 +122,15 @@ function taskTone(status: VolunteerTask["status"]) {
   return "info" as const;
 }
 
+type VolunteerTaskFilter = "assigned" | "pickup_pending" | "picked_up" | "in_transit" | "drop_otp_pending" | "completed" | "issues";
+
+function matchesTaskFilter(task: VolunteerTask, filter: VolunteerTaskFilter) {
+  if (filter === "assigned" || filter === "pickup_pending") return task.status === "confirmed";
+  if (filter === "picked_up" || filter === "in_transit" || filter === "drop_otp_pending") return task.status === "picked_up";
+  if (filter === "completed") return task.status === "completed";
+  return false;
+}
+
 function TaskCard({ task, action }: { task: VolunteerTask; action?: ReactNode }) {
   const assigned = isAssignedVolunteerTask(task);
   return (
@@ -163,29 +173,46 @@ function taskProgress(task: VolunteerTask) {
   ];
 }
 
-function TaskLocation({
-  icon,
-  label,
-  value,
+function directionsUrl(address: string | null) {
+  return address
+    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
+    : null;
+}
+
+function DeliveryLocationCard({
+  address,
   contact,
+  label,
   phone,
+  tone,
 }: {
-  icon: ReactNode;
+  address: string | null;
+  contact: string | null;
   label: string;
-  value: string | null;
-  contact?: string | null;
-  phone?: string | null;
+  phone: string | null;
+  tone: "pickup" | "dropoff";
 }) {
+  const url = directionsUrl(address);
   return (
-    <div className="volunteer-location">
-      <span className="volunteer-location-icon">{icon}</span>
-      <div>
-        <small>{label}</small>
-        <strong>{value ?? "Details are available after accepting the task."}</strong>
-        {contact && <span>{contact}</span>}
-        {phone && <a href={`tel:${phone}`}><Phone aria-hidden="true" size={14} />{phone}</a>}
+    <section className={`volunteer-location-card volunteer-location-card--${tone}`}>
+      <div className="volunteer-location-card-header">
+        <div className="volunteer-location-card-title">
+          <span className="volunteer-location-pin"><MapPin aria-hidden="true" size={17} /></span>
+          <div>
+            <small>{label}</small>
+            <h3>{tone === "pickup" ? "Donor pickup" : "NGO drop-off"}</h3>
+          </div>
+        </div>
+        {url && <a className="volunteer-directions-link" href={url} rel="noreferrer" target="_blank">Directions <ArrowRight aria-hidden="true" size={14} /></a>}
       </div>
-    </div>
+      <p className="volunteer-location-address">{address ?? "Address unavailable for this task."}</p>
+      {contact && <p className="volunteer-location-contact">{contact}</p>}
+      {phone && <a className="volunteer-location-phone" href={`tel:${phone}`}><Phone aria-hidden="true" size={14} />{phone}</a>}
+      <div className="volunteer-map-fallback" role="note">
+        <MapPin aria-hidden="true" size={16} />
+        <span>{address ? "Map preview unavailable because this delivery has no saved coordinates." : "A map cannot be shown until a location is saved."}</span>
+      </div>
+    </section>
   );
 }
 
@@ -281,15 +308,10 @@ export function VolunteerAvailableTasksPage() {
 
 export function VolunteerMyTasksPage() {
   const { data, error, loading, reload } = useVolunteerTasks();
-  const [filter, setFilter] = useState<"active" | "ready" | "out_for_delivery" | "completed">("active");
+  const [filter, setFilter] = useState<VolunteerTaskFilter>("assigned");
   const tasks = (data ?? [])
     .filter(isAssignedVolunteerTask)
-    .filter((task) => {
-      if (filter === "completed") return task.status === "completed";
-      if (filter === "ready") return task.status === "confirmed";
-      if (filter === "out_for_delivery") return task.status === "picked_up";
-      return task.status !== "completed";
-    });
+    .filter((task) => matchesTaskFilter(task, filter));
 
   return (
     <VolunteerShell
@@ -300,10 +322,13 @@ export function VolunteerMyTasksPage() {
     >
       <div aria-label="Filter tasks" className="volunteer-filter-tabs" role="tablist">
         {([
-          ["active", "All active"],
-          ["ready", "Ready to collect"],
-          ["out_for_delivery", "Out for delivery"],
-          ["completed", "Delivered"],
+          ["assigned", "Assigned"],
+          ["pickup_pending", "Pickup pending"],
+          ["picked_up", "Picked up"],
+          ["in_transit", "In transit"],
+          ["drop_otp_pending", "Drop OTP pending"],
+          ["completed", "Completed"],
+          ["issues", "Issues"],
         ] as const).map(([value, label]) => (
           <button aria-selected={filter === value} key={value} onClick={() => setFilter(value)} role="tab" type="button">{label}</button>
         ))}
@@ -318,9 +343,11 @@ export function VolunteerMyTasksPage() {
           />
         ))}</div>
         : <Card padding="sm"><EmptyState
-          action={filter === "active" && <Link className="volunteer-primary-link" to="/volunteer/tasks/available">Browse available tasks <ArrowRight size={16} /></Link>}
-          description={filter === "completed" ? "Delivered tasks remain available here for reference." : "Tasks will appear here as they enter this stage."}
-          title={filter === "completed" ? "No delivered tasks" : "No matching tasks"}
+          action={filter === "assigned" && <Link className="volunteer-primary-link" to="/volunteer/tasks/available">Browse available tasks <ArrowRight size={16} /></Link>}
+          description={filter === "drop_otp_pending" || filter === "issues"
+            ? "This stage is not available until delivery verification is added to the backend."
+            : "Tasks will appear here as they enter this stage."}
+          title={filter === "completed" ? "No completed tasks" : "No matching tasks"}
         /></Card>}
     </VolunteerShell>
   );
@@ -372,7 +399,7 @@ export function VolunteerTaskDetailsPage() {
         : null;
 
   return (
-    <VolunteerShell
+  <VolunteerShell
       activeLabel={assigned ? "My Tasks" : "Available Tasks"}
       action={<Button icon={<ArrowLeft size={16} />} onClick={() => navigate(assigned ? "/volunteer/tasks" : "/volunteer/tasks/available")} variant="outline">Back to tasks</Button>}
       description="Task details and delivery progress."
@@ -382,69 +409,54 @@ export function VolunteerTaskDetailsPage() {
         ? <ErrorState description={error} onRetry={() => void reload()} />
         : !task
           ? <ErrorState description="This task is no longer available or is not assigned to your volunteer account." />
-          : <div className="volunteer-detail-grid">
-            {actionError && <ErrorState description={actionError} onRetry={() => void reload()} />}
-            {success && <InlineAlert tone="success">{success}</InlineAlert>}
-            <Card className="volunteer-detail-card" padding="lg">
-              <div className="volunteer-detail-heading">
-                <div>
-                  <span className="volunteer-task-reference">TASK-{task.request_id.slice(0, 8).toUpperCase()}</span>
-                  <h2>{task.food_name}</h2>
-                  <p>{quantityLabel(task)} · {task.description}</p>
+          : <div className="volunteer-detail-layout">
+            {actionError && <div className="volunteer-detail-notice"><ErrorState description={actionError} onRetry={() => void reload()} /></div>}
+            {success && <div className="volunteer-detail-notice"><InlineAlert tone="success">{success}</InlineAlert></div>}
+            <main className="volunteer-detail-main">
+              <Card className="volunteer-detail-card" padding="lg">
+                <div className="volunteer-detail-heading">
+                  <div>
+                    <span className="volunteer-task-reference">TASK-{task.request_id.slice(0, 8).toUpperCase()}</span>
+                    <h2>{task.food_name}</h2>
+                    <p>{quantityLabel(task)} · {task.description}</p>
+                  </div>
+                  <StatusBadge tone={taskTone(task.status)}>{taskDeliveryLabel(task)}</StatusBadge>
                 </div>
-                <StatusBadge tone={taskTone(task.status)}>{taskStatusLabel(task.status)}</StatusBadge>
-              </div>
-              <div className="volunteer-route">
-                <TaskLocation
-                  contact={task.donor_name}
-                  icon={<MapPin size={18} />}
-                  label="Collect from donor"
-                  phone={task.donor_phone}
-                  value={task.pickup_address}
-                />
-                <span aria-hidden="true" className="volunteer-route-line" />
-                <TaskLocation
-                  contact={task.ngo_contact_name}
-                  icon={<MapPin size={18} />}
-                  label="Deliver to organization"
-                  phone={task.ngo_contact_phone}
-                  value={task.ngo_address}
-                />
-                {task.ngo_name && <p className="volunteer-recipient-name">{task.ngo_name}</p>}
-              </div>
-              <div className="volunteer-detail-facts">
-                <div><CalendarClock size={17} /><span><small>Pickup schedule</small><strong>{dateLabel(task.pickup_at)}</strong></span></div>
-                <div><Clock3 size={17} /><span><small>Food expiry</small><strong>{dateLabel(task.expires_at)}</strong></span></div>
-                <div><Utensils size={17} /><span><small>Food handling</small><strong>{task.pickup_instructions ?? "Follow safe food-handling practices during transport."}</strong></span></div>
-              </div>
-              <SectionHeading title="Delivery progress" />
-              <ProgressTimeline steps={taskProgress(task)} />
-              {assigned && task.status === "confirmed" && (
-                <TextareaField
-                  hint="Optional note recorded with the pickup handover."
-                  label="Pickup note"
-                  maxLength={1000}
-                  onChange={(event) => setNote(event.target.value)}
-                  value={note}
-                />
-              )}
-              {assigned && task.status === "picked_up" && !task.volunteer_delivered_at && (
-                <InlineAlert tone="info">The pickup is recorded. Confirm delivery after the organization receives the food; its receipt confirmation completes the task.</InlineAlert>
-              )}
-              {task.volunteer_delivered_at && task.status !== "completed" && (
-                <InlineAlert tone="success" title="Delivery recorded">The NGO still needs to confirm receipt before this task is marked completed.</InlineAlert>
-              )}
-              {task.status === "completed" && <InlineAlert tone="success" title="Task completed">The organization confirmed receipt on {dateLabel(task.volunteer_delivered_at)}.</InlineAlert>}
-              {action && <div className="volunteer-detail-action">{action}</div>}
-            </Card>
-            <Card className="volunteer-task-aside" padding="lg">
-              <span className="volunteer-feature-icon"><Truck aria-hidden="true" size={22} /></span>
-              <SectionHeading title={assigned ? "Your delivery" : "Accept this task"} />
-              <p>{assigned
-                ? "Task addresses and contact details are restricted to the volunteer assigned to this pickup."
-                : "Accepting assigns this task to you. Another volunteer cannot claim it at the same time."}</p>
-              <Link className="volunteer-text-link" to="/volunteer/tasks">View my tasks <ArrowRight size={15} /></Link>
-            </Card>
+                <div className="volunteer-detail-facts">
+                  <div><CalendarClock size={17} /><span><small>Pickup schedule</small><strong>{dateLabel(task.pickup_at)}</strong></span></div>
+                  <div><Clock3 size={17} /><span><small>Food expiry</small><strong>{dateLabel(task.expires_at)}</strong></span></div>
+                  <div><Utensils size={17} /><span><small>Food handling</small><strong>{task.pickup_instructions ?? "Follow safe food-handling practices during transport."}</strong></span></div>
+                </div>
+              </Card>
+              <section className="volunteer-location-section">
+                <SectionHeading description="Use the address links for navigation. Saved coordinates are not available for this delivery." title="Pickup and drop-off" />
+                <div className="volunteer-location-grid">
+                  <DeliveryLocationCard address={task.pickup_address} contact={task.donor_name} label="Step 1" phone={task.donor_phone} tone="pickup" />
+                  <DeliveryLocationCard address={task.ngo_address} contact={task.ngo_name ?? task.ngo_contact_name} label="Step 2" phone={task.ngo_contact_phone} tone="dropoff" />
+                </div>
+              </section>
+              <Card className="volunteer-action-card" padding="lg">
+                <SectionHeading description={assigned ? "Actions are enabled only for the current backend status." : "Accepting assigns this task to you atomically."} title="Verification and actions" />
+                {assigned && task.status === "confirmed" && <TextareaField hint="Optional note recorded with the pickup handover." label="Pickup note" maxLength={1000} onChange={(event) => setNote(event.target.value)} value={note} />}
+                {assigned && task.status === "confirmed" && <InlineAlert tone="info">Pickup OTP verification is not configured in the current backend. The existing authorized pickup action is available.</InlineAlert>}
+                {assigned && task.status === "picked_up" && !task.volunteer_delivered_at && <InlineAlert tone="info">The pickup is recorded. Confirm delivery after the organization receives the food; NGO receipt confirmation remains a separate stage.</InlineAlert>}
+                {task.volunteer_delivered_at && task.status !== "completed" && <InlineAlert tone="success" title="Awaiting NGO confirmation">Delivery recorded on {dateLabel(task.volunteer_delivered_at)}. The NGO still needs to confirm receipt.</InlineAlert>}
+                {task.status === "completed" && <InlineAlert tone="success" title="Verified">The organization confirmed receipt.</InlineAlert>}
+                {action && <div className="volunteer-detail-action">{action}</div>}
+              </Card>
+            </main>
+            <aside className="volunteer-detail-sidebar">
+              <Card className="volunteer-progress-card" padding="lg">
+                <div className="volunteer-sidebar-heading"><span className="volunteer-feature-icon"><Truck aria-hidden="true" size={22} /></span><StatusBadge tone={taskTone(task.status)}>{taskDeliveryLabel(task)}</StatusBadge></div>
+                <SectionHeading description="Based on the persisted pickup, delivery, and receipt timestamps." title="Delivery progress" />
+                <ProgressTimeline steps={taskProgress(task)} />
+              </Card>
+              <Card className="volunteer-task-aside" padding="lg">
+                <SectionHeading title={assigned ? "Your delivery" : "Accept this task"} />
+                <p>{assigned ? "Private pickup and recipient details are shown because this task is assigned to you." : "Another volunteer cannot claim this task at the same time after you accept it."}</p>
+                <Link className="volunteer-text-link" to="/volunteer/tasks">View my tasks <ArrowRight size={15} /></Link>
+              </Card>
+            </aside>
           </div>}
     </VolunteerShell>
   );

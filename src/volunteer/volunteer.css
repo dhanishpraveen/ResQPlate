@@ -13,10 +13,6 @@
 }
 
 .volunteer-dashboard-grid > .ui-card,
-.volunteer-detail-grid > .ui-card {
-  min-width: 0;
-}
-
 .volunteer-task-list {
   display: grid;
   gap: var(--space-3);
@@ -182,6 +178,7 @@
 
 .volunteer-filter-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
   margin-bottom: var(--space-4);
   border-bottom: 1px solid var(--color-border);
@@ -203,14 +200,27 @@
   font-weight: 650;
 }
 
-.volunteer-detail-grid {
+.volunteer-detail-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(15rem, 0.7fr);
+  grid-template-columns: minmax(0, 1.65fr) minmax(19rem, 0.75fr);
   align-items: start;
   gap: var(--space-5);
 }
 
+.volunteer-detail-main,
+.volunteer-detail-sidebar {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-5);
+}
+
+.volunteer-detail-notice {
+  grid-column: 1 / -1;
+}
+
 .volunteer-detail-card,
+.volunteer-action-card,
+.volunteer-progress-card,
 .volunteer-task-aside {
   display: grid;
   gap: var(--space-5);
@@ -337,13 +347,126 @@
   justify-content: flex-end;
 }
 
+.volunteer-location-section {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.volunteer-location-section .ui-section-heading {
+  margin: 0;
+}
+
+.volunteer-location-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.volunteer-location-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-top: 3px solid var(--color-brand-500);
+  border-radius: var(--radius-lg);
+}
+
+.volunteer-location-card--dropoff {
+  border-top-color: var(--color-brand-800);
+}
+
+.volunteer-location-card-header,
+.volunteer-location-card-title,
+.volunteer-sidebar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.volunteer-location-card-title {
+  justify-content: flex-start;
+}
+
+.volunteer-location-card-title > div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.volunteer-location-card-title small {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.volunteer-location-card-title h3 {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.volunteer-location-pin {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-brand-50);
+  color: var(--color-brand-800);
+}
+
+.volunteer-directions-link,
+.volunteer-location-phone {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-brand-800);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.volunteer-location-address {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.volunteer-location-contact {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.volunteer-map-fallback {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.volunteer-map-fallback svg {
+  flex: 0 0 auto;
+  color: var(--color-brand-800);
+}
+
+.volunteer-progress-card .ui-timeline {
+  margin-top: 0;
+}
+
 .volunteer-task-aside .ui-section-heading {
   margin: 0;
 }
 
 @media (max-width: 900px) {
   .volunteer-dashboard-grid,
-  .volunteer-detail-grid {
+  .volunteer-detail-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -354,6 +477,10 @@
   }
 
   .volunteer-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .volunteer-location-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 

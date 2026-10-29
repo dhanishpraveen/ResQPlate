@@ -481,6 +481,20 @@ already complete.
   Donor and volunteer private contact details remain unavailable in the NGO
   view because no approved cross-role contact projection exists.
 
+### Volunteer delivery details milestone
+
+- Reworked `/volunteer/tasks/:requestId` into a responsive two-column details
+  view with food facts, donor pickup, NGO drop-off, directions links, truthful
+  coordinate/map fallbacks, current status, actions, and a persisted-status
+  progress timeline.
+- The existing `list_volunteer_tasks()` RPC already returned the food,
+  contact, address, and timestamp fields; the prior page rendered them inside
+  one dense card and used an isolated sidebar, which caused the apparent empty
+  details experience. No backend schema or status transition was changed.
+- Pickup/drop OTP infrastructure and coordinate persistence remain backend
+  dependencies. The page does not fabricate coordinates or claim OTP
+  verification when those capabilities are absent.
+
 ## Phase 6: Shared functionality
 
 - **Objectives:** messaging, notifications, shared profile patterns, settings,
