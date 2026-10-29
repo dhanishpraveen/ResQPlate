@@ -60,6 +60,7 @@ import {
   ngoRequestLabel,
   ngoRequestTone,
   summarizeNgoRequests,
+  isAwaitingNgoVerification,
   type NgoDeliveryFilter,
   type NgoRequestFilter,
 } from "./metrics";
@@ -677,7 +678,11 @@ export function NgoDeliveriesPage() {
   const deliveries = useMemo(() => {
     const base = filterNgoDeliveries(requests ?? [], filter);
     if (!verificationOnly) return base;
-    return base.filter((request) => verificationFilter === "all" || request.delivery_verification_status === verificationFilter);
+    return base.filter((request) => verificationFilter === "all"
+      ? request.delivery_verification_status !== "pending" || isAwaitingNgoVerification(request)
+      : verificationFilter === "pending"
+        ? isAwaitingNgoVerification(request)
+        : request.delivery_verification_status === verificationFilter);
   }, [filter, requests, verificationFilter, verificationOnly]);
 
   return (
@@ -751,6 +756,10 @@ export function NgoDeliveryDetailsPage() {
   const [issueReason, setIssueReason] = useState("");
   const [reportingIssue, setReportingIssue] = useState(false);
   const [issueError, setIssueError] = useState<string | null>(null);
+  const canReviewDelivery = Boolean(state.data
+    && state.data.request.status === "picked_up"
+    && state.data.request.delivery_verification_status === "pending"
+    && (state.data.request.volunteer_id === null || state.data.request.volunteer_delivered_at !== null));
   useEffect(() => {
     let active = true;
     async function load() {
@@ -815,10 +824,10 @@ export function NgoDeliveryDetailsPage() {
             {state.data.request.volunteer_delivered_at && state.data.request.status !== "completed" && <InlineAlert tone="info" title="Delivered to your organization">A volunteer confirmed delivery on {dateLabel(state.data.request.volunteer_delivered_at)}. Confirm receipt to complete this request.</InlineAlert>}
             {state.data.request.delivery_verification_status === "verified" && <InlineAlert tone="success" title="Receipt verified">Your organization verified this delivery on {dateLabel(state.data.request.delivery_verified_at)}.</InlineAlert>}
             {state.data.request.delivery_verification_status === "issue_reported" && <InlineAlert tone="warning" title="Issue reported">{state.data.request.delivery_issue_reason}</InlineAlert>}
-            {isDelivery && state.data.request.status === "picked_up" && state.data.request.delivery_verification_status === "pending" && <div className="ngo-form-actions">
+            {isDelivery && canReviewDelivery && <div className="ngo-form-actions">
               <Link className="ngo-button-link" to={`/ngo/deliveries/${state.data.request.id}/receipt`}>Confirm food receipt</Link>
             </div>}
-            {isDelivery && state.data.request.status === "picked_up" && state.data.request.delivery_verification_status === "pending" && <form className="ngo-issue-form" onSubmit={(event) => void reportIssue(event)}>
+            {isDelivery && canReviewDelivery && <form className="ngo-issue-form" onSubmit={(event) => void reportIssue(event)}>
               {issueError && <InlineAlert tone="danger">{issueError}</InlineAlert>}
               <TextareaField label="Report a delivery issue" hint="Explain what needs follow-up. This is required and visible to authorized staff." maxLength={2000} onChange={(event) => setIssueReason(event.target.value)} value={issueReason} />
               <Button loading={reportingIssue} type="submit" variant="outline">Report issue</Button>

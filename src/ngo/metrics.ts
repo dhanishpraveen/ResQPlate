@@ -3,6 +3,12 @@ import type { NgoRequest } from "./data";
 export type NgoRequestFilter = "all" | "pending" | "accepted" | "declined" | "completed";
 export type NgoDeliveryFilter = "all" | "scheduled" | "in_transit" | "completed";
 
+export function isAwaitingNgoVerification(request: NgoRequest) {
+  return request.status === "picked_up"
+    && request.delivery_verification_status === "pending"
+    && (request.volunteer_id === null || request.volunteer_delivered_at !== null);
+}
+
 export function ngoRequestLabel(status: NgoRequest["status"]) {
   if (status === "confirmed") return "Accepted";
   if (status === "picked_up") return "In transit";

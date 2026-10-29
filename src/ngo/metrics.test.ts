@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { NgoRequest } from "./data";
 import {
   filterNgoDeliveries,
+  isAwaitingNgoVerification,
   filterNgoRequests,
   matchesNgoRequest,
   ngoRequestLabel,
@@ -64,5 +65,18 @@ describe("NGO request and delivery metrics", () => {
     expect(matchesNgoRequest(requests[0], "PENDING-1")).toBe(true);
     expect(matchesNgoRequest(requests[0], "donation-pending-1")).toBe(true);
     expect(matchesNgoRequest(requests[0], "unrelated")).toBe(false);
+  });
+
+  it("only exposes delivered assigned tasks for NGO verification", () => {
+    expect(isAwaitingNgoVerification(request("pending-review", "picked_up"))).toBe(true);
+    expect(isAwaitingNgoVerification({
+      ...request("not-delivered", "picked_up"),
+      volunteer_id: "volunteer-1",
+      volunteer_delivered_at: null,
+    })).toBe(false);
+    expect(isAwaitingNgoVerification({
+      ...request("verified", "completed"),
+      delivery_verification_status: "verified",
+    })).toBe(false);
   });
 });
