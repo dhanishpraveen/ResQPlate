@@ -26,7 +26,10 @@ the approved designs and later product decisions.
 - Tailwind CSS v4 (Vite plugin)
 - Lucide React for a consistent icon family
 - Supabase Auth, PostgreSQL, and Storage integration through the public
-  authenticated client; reviewed access policies are drafted in SQL migrations
+  authenticated client, with database authorization enforced by RLS
+- Existing Random Forest surplus forecasts plus an authenticated Supabase Edge
+  Function for deterministic recommendations and optional Hugging Face
+  Inference Providers explanations
 - VS Code Copilot Agent mode; optional Supabase MCP configuration
 - Git and GitHub
 
@@ -97,13 +100,13 @@ and the controlled path to enabling writes for approved migrations.
 
 These are the scripts currently defined in `package.json`:
 
-| Command | Purpose |
-| --- | --- |
-| `npm run dev` | Start the local Vite development server. |
-| `npm run typecheck` | Type-check the application TypeScript configuration. |
-| `npm run build` | Type-check project references and create a production build. |
-| `npm test` | Run the configured Vitest unit/component tests. |
-| `npm run preview` | Preview the production build locally. |
+| Command             | Purpose                                                      |
+| ------------------- | ------------------------------------------------------------ |
+| `npm run dev`       | Start the local Vite development server.                     |
+| `npm run typecheck` | Type-check the application TypeScript configuration.         |
+| `npm run build`     | Type-check project references and create a production build. |
+| `npm test`          | Run the configured Vitest unit/component tests.              |
+| `npm run preview`   | Preview the production build locally.                        |
 
 No lint or Playwright end-to-end command is configured. Current tests cover
 selected auth route/validation and donor metric/input-validation logic; they
@@ -116,6 +119,7 @@ do not establish database, RLS, Storage, or live-auth behavior.
 .vscode/mcp.json                Workspace Supabase MCP configuration
 docs/
   architecture.md               Current architecture and security model
+  ai-intelligence.md             Hybrid ML/LLM architecture and provider setup
   authentication.md             Auth, donor lifecycle, impact rules and blockers
   development-plan.md           Ordered implementation phases
   design/
@@ -135,6 +139,7 @@ src/
   styles/                       Central design tokens and stylesheets
   test/                         Shared test setup
 supabase/
+  functions/                     Authenticated AI and workflow Edge Functions
   migrations/                   Draft versioned database migrations
 .env.example                     Public client-variable template
 index.html                       Vite HTML entry
@@ -172,6 +177,16 @@ If a credential was previously committed, adding it to `.gitignore` does not
 remove it from Git history. Revoke/rotate it with the provider and follow the
 repository's approved secret-remediation process; do not reproduce the value
 in an issue or report.
+
+## AI Intelligence
+
+The donor and NGO AI insights workflow reuses the saved Random Forest surplus
+forecast and adds an authenticated Edge Function for deterministic
+recommendations and optional Hugging Face explanations. It does not publish
+donations or alter forecast outcomes. See
+[docs/ai-intelligence.md](docs/ai-intelligence.md) for model selection,
+server-side token setup, local function serving, manual deployment, fallback
+behavior, security boundaries, and limitations.
 
 ## Known setup limitations
 

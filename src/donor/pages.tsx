@@ -67,6 +67,9 @@ import {
 } from "../ai/data";
 import { predictSurplus } from "../ai/api";
 import { ForecastOutcomeForm } from "../ai/ForecastOutcomeForm";
+import { AiInsightsPanel } from "../ai/AiInsightsPanel";
+import type { IntelligenceInput } from "../../supabase/functions/_shared/intelligence";
+import type { ForecastRow } from "../ai/data";
 
 type LoadState<T> = { data: T; error: null; loading: false } | { data: null; error: string; loading: false } | { data: null; error: null; loading: true };
 
@@ -201,6 +204,15 @@ export function DonorDashboardPage() {
   const metrics = useMemo(() => impact.data ? calculateDonorImpact(impact.data) : null, [impact.data]);
   const monthly = useMemo(() => impact.data ? monthlyCompletedSummary(impact.data) : [], [impact.data]);
   const recent = data?.donations.slice(0, 4) ?? [];
+  const intelligenceInput = useMemo<IntelligenceInput>(() => ({
+    scope: "donor_dashboard",
+    now: new Date().toISOString(),
+    donations: (data?.donations ?? []).map(({ id, food_name, cuisine_type, quantity, unit, expires_at, status }) => ({
+      id, food_name, cuisine_type, quantity, unit, expires_at, status,
+    })),
+    demands: [],
+    forecast: null,
+  }), [data]);
   const displayName = profile?.full_name?.split(/\s+/)[0] ?? "there";
 
   return (
@@ -234,6 +246,7 @@ export function DonorDashboardPage() {
           </div>
           <Link className="donor-primary-link" to="/donor/forecast">Predict food surplus <ArrowRight aria-hidden="true" size={15} /></Link>
         </Card>
+        {data && <AiInsightsPanel fallbackInput={intelligenceInput} scope="donor_dashboard" />}
 
         <div className="donor-dashboard-lower">
           <Card className="donor-dashboard-card" padding="md">
@@ -313,6 +326,7 @@ export function DonorForecastPage() {
     ready_at: "",
   });
   const [prediction, setPrediction] = useState<ForecastPrediction | null>(null);
+  const [forecastRecord, setForecastRecord] = useState<ForecastRow | null>(null);
   const [forecasts, setForecasts] = useState<Awaited<ReturnType<typeof listDonorForecasts>>>([]);
   const [outcomes, setOutcomes] = useState<ForecastOutcome[]>([]);
   const [outcomesAvailable, setOutcomesAvailable] = useState(false);
@@ -322,6 +336,26 @@ export function DonorForecastPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const insightForecast = forecastRecord ?? forecasts[0] ?? null;
+  const forecastInsightInput = useMemo<IntelligenceInput | null>(() => insightForecast ? ({
+    scope: "donor_forecast",
+    now: new Date().toISOString(),
+    donations: [],
+    demands: [],
+    forecast: {
+      food_category: insightForecast.food_category,
+      restaurant_type: insightForecast.restaurant_type,
+      meal_period: insightForecast.meal_period,
+      planned_quantity: insightForecast.planned_quantity,
+      expected_customers: insightForecast.expected_customers,
+      ready_at: insightForecast.ready_at,
+      predicted_quantity: insightForecast.predicted_quantity,
+      uncertainty_lower: insightForecast.uncertainty_lower,
+      uncertainty_upper: insightForecast.uncertainty_upper,
+      unit: insightForecast.unit,
+      model_version: insightForecast.model_version,
+    },
+  }) : null, [insightForecast]);
 
   const loadForecasts = useCallback(async () => {
     if (!supabase || !session) {
@@ -369,6 +403,7 @@ export function DonorForecastPage() {
     setError(null);
     setSuccess(null);
     setPrediction(null);
+    setForecastRecord(null);
     try {
       const input = {
         food_category: form.food_category,
@@ -380,6 +415,7 @@ export function DonorForecastPage() {
       };
       const result = await predictSurplus(supabase, input);
       setPrediction(result.prediction);
+      setForecastRecord(result.forecast);
       setSuccess("Forecast saved as an estimate. It has not been published as a donation.");
       await loadForecasts();
     } catch (cause) {
@@ -446,6 +482,7 @@ export function DonorForecastPage() {
             <div className="donor-forecast-meta"><span>Ready {forecastDateLabel(form.ready_at)}</span><span>Model {prediction.model_version}</span></div>
             <Button icon={<Plus size={16} />} onClick={() => navigate("/donor/donations/new", { state: { forecast: prediction.predicted_quantity } })}>Review confirmed donation</Button>
           </Card>}
+          {forecastInsightInput && insightForecast && <AiInsightsPanel fallbackInput={forecastInsightInput} forecastId={insightForecast.id} scope="donor_forecast" />}
         </main>
         <aside>
           <Card padding="lg">

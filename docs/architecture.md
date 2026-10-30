@@ -59,17 +59,30 @@ application grows:
 - **Reporting and impact:** define metric meaning and aggregation consistently
   before presenting totals; avoid trusting client-provided totals.
 
+### AI intelligence boundary
+
+The existing Random Forest/FastAPI/`predict-surplus` path owns numerical
+forecast values and model provenance. The optional Hugging Face integration
+is restricted to server-side phrasing of verified summaries and a deterministic
+candidate action; it cannot set quantities, change donation/request state, or
+execute tools. The `ai-intelligence` function verifies Auth identity and role,
+uses caller-scoped Supabase access, and returns deterministic recommendations
+when its token/provider is unavailable. It sends only minimized operational
+facts to the provider, never identities, addresses, contact fields, record IDs,
+or auth credentials. See `docs/ai-intelligence.md` for exact behavior and
+operational limitations.
+
 ## User roles and access
 
 The role descriptions below are expected capabilities from the brief, not
 confirmed final policy. All access must be enforced by trusted controls.
 
-| Role | Expected access (subject to confirmation) | Key boundary |
-| --- | --- | --- |
-| Donor | Manage its own organization profile and donations; review/respond to requests for its donations; confirm handover; view its impact. | Must not read or alter unrelated donor records or private NGO/volunteer details. |
-| NGO | Manage its own organization profile; discover eligible available donations; create and manage its requests; view its deliveries; confirm receipt; view its impact. | Verification and membership rules must be defined before access is granted. |
-| Volunteer | Manage own profile/availability; discover eligible delivery tasks; accept assigned work; update collection/delivery progress; view own earnings and impact. | Must not access unrelated tasks, participant private data, or financial information. |
-| Administrator, if introduced | May require verification and support functions. | Not established by the brief; do not add without explicit requirements and audited least-privilege policy. |
+| Role                         | Expected access (subject to confirmation)                                                                                                                          | Key boundary                                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Donor                        | Manage its own organization profile and donations; review/respond to requests for its donations; confirm handover; view its impact.                                | Must not read or alter unrelated donor records or private NGO/volunteer details.                           |
+| NGO                          | Manage its own organization profile; discover eligible available donations; create and manage its requests; view its deliveries; confirm receipt; view its impact. | Verification and membership rules must be defined before access is granted.                                |
+| Volunteer                    | Manage own profile/availability; discover eligible delivery tasks; accept assigned work; update collection/delivery progress; view own earnings and impact.        | Must not access unrelated tasks, participant private data, or financial information.                       |
+| Administrator, if introduced | May require verification and support functions.                                                                                                                    | Not established by the brief; do not add without explicit requirements and audited least-privilege policy. |
 
 Client-side role selection is for onboarding/UI only and cannot authorize
 database, storage, or server operations. Role assignment and organization
@@ -80,23 +93,23 @@ verification need trusted workflows.
 These are candidate entities, not final tables or mandatory fields. Determine
 relationships, retention, validation, and policies before migrations:
 
-| Candidate entity | Purpose and likely relationships | Integrity/access considerations |
-| --- | --- | --- |
-| User profile | Application profile associated with an authenticated user. | Separate trusted role assignment from editable profile data; user controls only permitted own data. |
-| Donor/restaurant profile | Business identity and contact context for donations. | Organization ownership/membership and private contact data require clear boundaries. |
-| NGO profile | Organization identity, service area, and verification state. | Verification evidence is private; approval authority and membership are unresolved. |
-| Volunteer profile | Volunteer details and operational preferences. | Limit personal data visibility and restrict edits to the owner or approved process. |
-| Donation | Food listing associated with a donor; may relate to pickup requests and deliveries. | Define availability, quantity, eligibility, safe-food rules, and immutable history as needed. |
-| Pickup request | NGO request for a donation; likely linked to donation and NGO. | Prevent unauthorized requests and conflicting acceptance; concurrency rules need design. |
-| Delivery assignment | Work assigned/accepted by a volunteer for a donation/request. | Define assignment authority, uniqueness, cancellation, and role access. |
-| Delivery status history | Auditable record of lifecycle events. | Prefer trusted append-only events and validate allowed transitions. |
-| Receipt confirmation | NGO's confirmation linked to a completed delivery. | Restrict confirmation to authorized NGO participant; decide correction/dispute flow. |
-| Conversation/message | Communication among authorized participants, optionally linked to a request/delivery. | Enforce participant membership on reads and writes; handle retention and moderation requirements. |
-| Notification | A user's notification of relevant events. | Enforce recipient ownership and avoid leaking details in payloads. |
-| Uploaded document/image | Donation imagery or NGO verification document in Storage. | Validate content and ownership; private verification files need restricted access. |
-| Volunteer availability | Volunteer availability windows/preferences. | Only owner or approved scheduling processes may change it; define time-zone semantics. |
-| Earnings/reimbursements | Financial or reimbursement records associated with volunteer and possibly delivery. | Define whether the platform pays volunteers; restrict access and audit changes. |
-| Impact metrics | Aggregates for donor, NGO, volunteer, or platform reporting. | Define authoritative calculation, units, corrections, and privacy before showing totals. |
+| Candidate entity         | Purpose and likely relationships                                                      | Integrity/access considerations                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| User profile             | Application profile associated with an authenticated user.                            | Separate trusted role assignment from editable profile data; user controls only permitted own data. |
+| Donor/restaurant profile | Business identity and contact context for donations.                                  | Organization ownership/membership and private contact data require clear boundaries.                |
+| NGO profile              | Organization identity, service area, and verification state.                          | Verification evidence is private; approval authority and membership are unresolved.                 |
+| Volunteer profile        | Volunteer details and operational preferences.                                        | Limit personal data visibility and restrict edits to the owner or approved process.                 |
+| Donation                 | Food listing associated with a donor; may relate to pickup requests and deliveries.   | Define availability, quantity, eligibility, safe-food rules, and immutable history as needed.       |
+| Pickup request           | NGO request for a donation; likely linked to donation and NGO.                        | Prevent unauthorized requests and conflicting acceptance; concurrency rules need design.            |
+| Delivery assignment      | Work assigned/accepted by a volunteer for a donation/request.                         | Define assignment authority, uniqueness, cancellation, and role access.                             |
+| Delivery status history  | Auditable record of lifecycle events.                                                 | Prefer trusted append-only events and validate allowed transitions.                                 |
+| Receipt confirmation     | NGO's confirmation linked to a completed delivery.                                    | Restrict confirmation to authorized NGO participant; decide correction/dispute flow.                |
+| Conversation/message     | Communication among authorized participants, optionally linked to a request/delivery. | Enforce participant membership on reads and writes; handle retention and moderation requirements.   |
+| Notification             | A user's notification of relevant events.                                             | Enforce recipient ownership and avoid leaking details in payloads.                                  |
+| Uploaded document/image  | Donation imagery or NGO verification document in Storage.                             | Validate content and ownership; private verification files need restricted access.                  |
+| Volunteer availability   | Volunteer availability windows/preferences.                                           | Only owner or approved scheduling processes may change it; define time-zone semantics.              |
+| Earnings/reimbursements  | Financial or reimbursement records associated with volunteer and possibly delivery.   | Define whether the platform pays volunteers; restrict access and audit changes.                     |
+| Impact metrics           | Aggregates for donor, NGO, volunteer, or platform reporting.                          | Define authoritative calculation, units, corrections, and privacy before showing totals.            |
 
 The reference and brief do not establish mandatory columns, cardinalities,
 whether multiple NGOs can request one donation, delivery assignment policy,

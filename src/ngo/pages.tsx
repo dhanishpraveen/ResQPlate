@@ -55,6 +55,9 @@ import {
   type NgoRequest,
   type NgoRequestHistory,
 } from "./data";
+import { AiInsightsPanel } from "../ai/AiInsightsPanel";
+import { listNgoDemands } from "../ai/data";
+import type { IntelligenceInput } from "../../supabase/functions/_shared/intelligence";
 import {
   filterNgoDeliveries,
   filterNgoRequests,
@@ -266,6 +269,8 @@ export function NgoDashboardPage() {
   const navigate = useNavigate();
   const { data: requests, error, loading, reload } = useNgoRequests();
   const [available, setAvailable] = useState<LoadState<NgoDonationView[]>>({ data: null, error: null, loading: true });
+  const [ngoDemands, setNgoDemands] = useState<Awaited<ReturnType<typeof listNgoDemands>>>([]);
+  const [demandError, setDemandError] = useState<string | null>(null);
   const displayName = profile?.full_name?.split(/\s+/)[0] ?? "there";
 
   const loadAvailable = useCallback(async () => {
@@ -276,6 +281,10 @@ export function NgoDashboardPage() {
     setAvailable({ data: null, error: null, loading: true });
     try {
       const donations = await fetchAvailableDonations(supabase);
+      const demandResult = await listNgoDemands(supabase).then((data) => ({ data, error: null as string | null }))
+        .catch((cause: unknown) => ({ data: [], error: messageOf(cause) }));
+      setNgoDemands(demandResult.data);
+      setDemandError(demandResult.error);
       const imageUrls = await fetchSignedImages(supabase, "donation-images", donations.map((donation) => donation.photo_path));
       setAvailable({
         data: donations.map((donation) => ({
@@ -292,6 +301,28 @@ export function NgoDashboardPage() {
   useEffect(() => { void loadAvailable(); }, [loadAvailable]);
   const summary = useMemo(() => summarizeNgoRequests(requests ?? []), [requests]);
   const recent = requests?.slice(0, 3) ?? [];
+  const intelligenceInput = useMemo<IntelligenceInput>(() => {
+    const activeRequestDonationIds = new Set((requests ?? [])
+      .filter((request) => ["pending", "confirmed", "picked_up"].includes(request.status))
+      .map((request) => request.donation_id));
+    return {
+      scope: "ngo_dashboard",
+      now: new Date().toISOString(),
+      donations: (available.data ?? []).map(({ id, food_name, cuisine_type, quantity, unit, expires_at, status }) => ({
+        id,
+        food_name,
+        cuisine_type,
+        quantity,
+        unit,
+        expires_at,
+        status: activeRequestDonationIds.has(id) ? "claimed" : status,
+      })),
+      demands: ngoDemands.map(({ food_category, required_quantity, unit, required_by, status }) => ({
+        food_category, required_quantity, unit, required_by, status,
+      })),
+      forecast: null,
+    };
+  }, [available.data, ngoDemands, requests]);
 
   return (
     <NgoShell activeLabel="Dashboard" title={`Welcome, ${displayName}!`} description="Find safe surplus food for the people you serve.">
@@ -312,6 +343,8 @@ export function NgoDashboardPage() {
           </div>
           <div aria-hidden="true" className="ngo-promo-art"><Heart size={70} strokeWidth={1.2} /><UsersRound size={42} /></div>
         </section>
+        {demandError && <InlineAlert tone="warning">Saved organization requirements could not be loaded, so local fallback matching is limited to listing urgency.</InlineAlert>}
+        {available.data && requests && <AiInsightsPanel fallbackInput={intelligenceInput} scope="ngo_dashboard" />}
         <div className="ngo-dashboard-grid">
           <Card padding="md">
             <SectionHeading

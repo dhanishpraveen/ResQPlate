@@ -761,6 +761,43 @@ already complete.
   production build, and diff checks passed; the build retains the existing
   large-chunk warning.
 
+### Hybrid AI intelligence integration
+
+- Preserved the existing Random Forest artifact, FastAPI inference, forecast
+  persistence, synthetic-data labeling, and append-only measured outcome
+  collection/evaluation pipeline. No retraining, target changes, or migrations
+  were introduced.
+- Added `ai-intelligence`, a role-checked Supabase Edge Function. It reloads
+  donor-owned forecast/donation data or NGO-visible available donations and
+  own requirements through the existing authenticated access paths. NGO
+  matches exclude this NGO's already active requests, expired listings,
+  claimed/completed records, incompatible units/quantities, and requirements
+  with infeasible required-by times.
+- Added a deterministic fallback recommendation service, strict structured
+  response checks, minimum-data Hugging Face adapter, 8-second provider
+  timeout, bounded request body, 15-second cooldown/four-per-minute
+  per-instance throttle, and safe fallback handling for missing token, bad
+  output, provider errors, and quota failures.
+- Added responsive insights panels to donor dashboard, donor forecast result,
+  and NGO dashboard. They distinguish verified facts, Random Forest outputs,
+  model-provided uncertainty range, fallback recommendations, and optional
+  Hugging Face phrasing. Donor and NGO workflows are advisory only and do not
+  change records.
+- Selected Hugging Face Inference Providers chat-completions model
+  `openai/gpt-oss-120b:cheapest` based on current provider documentation for
+  instruction-following chat and the documented provider cost-selection
+  suffix. Live account-specific model access, pricing, and request success
+  have not been verified. The token is optional and is never exposed to the
+  browser.
+- Added `docs/ai-intelligence.md` and a server-only placeholder environment
+  template. Local function serving and deployment steps are documented;
+  deployment was not performed. The memory-based per-instance limiter is
+  explicitly not a distributed production quota system.
+- **Verification status:** focused AI tests and whole-project checks will be
+  recorded after the requested full frontend/Python/typecheck/build/dependency
+  and diff checks complete. Live Supabase RLS and Hugging Face provider
+  behavior require credentials and were not claimed as verified.
+
 ## Phase 6: Shared functionality
 
 - **Objectives:** messaging, notifications, shared profile patterns, settings,
