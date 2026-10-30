@@ -6,9 +6,11 @@ import {
   fetchPickupRequestVolunteerAssignment,
   formatDonationSaveError,
   formatSupabaseError,
+  reviewPickupRequest,
   uploadPrivateImage,
 } from "./data";
 import donationLocationGrantMigration from "../../supabase/migrations/20261029235100_grant_donation_location_columns.sql?raw";
+import donorWorkflowMigration from "../../supabase/migrations/20261029000000_donor_module.sql?raw";
 
 describe("donation data helpers", () => {
   it("persists pickup coordinates and the photo path in the donation payload", () => {
@@ -53,7 +55,7 @@ describe("donation data helpers", () => {
     const from = vi.fn().mockReturnValue({ insert });
     const client = { from } as never;
     const values = buildDonationWriteValues({
-      food_name: "Vegetable bowls",
+      food_name: "Biryani",
       cuisine_type: "Indian",
       description: "Fresh meal portions",
       quantity: 24,
@@ -69,8 +71,75 @@ describe("donation data helpers", () => {
 
     await expect(createDonation(client, "authenticated-donor-id", values)).resolves.toBe("donation-id");
     expect(from).toHaveBeenCalledWith("donations");
-    expect(insert).toHaveBeenCalledWith({ donor_id: "authenticated-donor-id", ...values });
+    expect(insert).toHaveBeenCalledWith({
+      donor_id: "authenticated-donor-id",
+      ...values,
+    });
     expect(select).toHaveBeenCalledWith("id");
+  });
+
+  it("rejects a missing donor ID before making an insert request", async () => {
+    const from = vi.fn();
+    const client = { from } as never;
+    const values = buildDonationWriteValues({
+      food_name: "Biryani",
+      cuisine_type: "Indian",
+      description: "Fresh meal portions",
+      quantity: 12,
+      unit: "servings",
+      expires_at: "2030-01-01T10:00:00.000Z",
+      pickup_address: "10 Market Street",
+      pickup_latitude: null,
+      pickup_longitude: null,
+      pickup_instructions: null,
+      photo_path: null,
+      status: "available",
+    });
+
+    await expect(createDonation(client, "", values))
+      .rejects.toThrow("Your donor account could not be verified");
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("rejects an insert response that does not contain a persisted row ID", async () => {
+    const single = vi.fn().mockResolvedValue({ data: null, error: null });
+    const select = vi.fn().mockReturnValue({ single });
+    const insert = vi.fn().mockReturnValue({ select });
+    const from = vi.fn().mockReturnValue({ insert });
+    const client = { from } as never;
+    const values = buildDonationWriteValues({
+      food_name: "Biryani",
+      cuisine_type: "Indian",
+      description: "Fresh meal portions",
+      quantity: 12,
+      unit: "servings",
+      expires_at: "2030-01-01T10:00:00.000Z",
+      pickup_address: "10 Market Street",
+      pickup_latitude: null,
+      pickup_longitude: null,
+      pickup_instructions: null,
+      photo_path: null,
+      status: "available",
+    });
+
+    await expect(createDonation(client, "authenticated-donor-id", values))
+      .rejects.toThrow("The donation was not confirmed as saved");
+  });
+
+  it("confirms the selected NGO request through the donor-owned workflow RPC", async () => {
+    const rpc = vi.fn().mockResolvedValue({ error: null });
+    await expect(reviewPickupRequest({ rpc } as never, "request-id", "confirm")).resolves.toBeUndefined();
+    expect(rpc).toHaveBeenCalledWith("review_pickup_request", {
+      p_request_id: "request-id",
+      p_action: "confirm",
+    });
+
+    const confirmationFunction = donorWorkflowMigration.match(
+      /create function public\.review_pickup_request[\s\S]*?\$\$;/i,
+    )?.[0] ?? "";
+    expect(confirmationFunction).toMatch(/update public\.donations\s+set status = 'claimed'/i);
+    expect(confirmationFunction).toMatch(/update public\.pickup_requests\s+set status = 'confirmed'/i);
+    expect(confirmationFunction).toMatch(/where r\.id = p_request_id and d\.donor_id = \(select auth\.uid\(\)\)/i);
   });
 
   it("surfaces PostgREST diagnostics while redacting sensitive data", () => {

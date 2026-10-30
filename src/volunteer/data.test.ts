@@ -5,6 +5,8 @@ import {
   confirmVolunteerPickup,
   isPickupExpired,
   isAssignedVolunteerTask,
+  isAvailableVolunteerTask,
+  isPickupWindowCurrent,
   mapVolunteerTaskResponse,
   taskDeliveryLabel,
   taskStatusLabel,
@@ -12,6 +14,10 @@ import {
   volunteerNavigationStage,
   volunteerPickupErrorMessage,
 } from "./data";
+import donorWorkflowMigration from "../../supabase/migrations/20261029000000_donor_module.sql?raw";
+import volunteerWorkflowMigration from "../../supabase/migrations/20261029110000_volunteer_task_workflow.sql?raw";
+import volunteerExpiryVisibilityMigration from "../../supabase/migrations/20261030053000_volunteer_task_expiry_visibility.sql?raw";
+import cleanupExpiredMealsScript from "../../supabase/manual/cleanup_expired_meals_20261029.sql?raw";
 
 function task(overrides: Partial<VolunteerTask> = {}): VolunteerTask {
   return {
@@ -63,6 +69,51 @@ describe("volunteer task data helpers", () => {
     expect(isPickupExpired(expiredTask.expires_at, now)).toBe(true);
     expect(isPickupExpired("2026-10-30T12:00:01.000Z", now)).toBe(false);
     expect(taskDeliveryLabel(expiredTask, now)).toBe("Pickup expired");
+  });
+
+  it("only exposes confirmed, unassigned tasks while their pickup window is current", () => {
+    const now = Date.parse("2026-10-30T12:00:00.000Z");
+    const confirmedTask = task({ expires_at: "2026-10-30T12:00:01.000Z" });
+
+    expect(isAvailableVolunteerTask(confirmedTask, now)).toBe(true);
+    expect(isAvailableVolunteerTask(task({
+      volunteer_assigned: true,
+      expires_at: "2026-10-30T12:00:01.000Z",
+    }), now)).toBe(false);
+    expect(isAvailableVolunteerTask(task({ status: "confirmed", expires_at: "2026-10-30T11:59:59.000Z" }), now)).toBe(false);
+    expect(isAvailableVolunteerTask(task({ status: "pending" }), now)).toBe(false);
+  });
+
+  it("keeps expired uncollected pickups out of active stages without hiding completed history", () => {
+    const now = Date.parse("2026-10-30T12:00:00.000Z");
+    const expired = { status: "confirmed" as const, expires_at: "2026-10-30T11:59:59.000Z" };
+
+    expect(isPickupWindowCurrent(expired, now)).toBe(false);
+    expect(isPickupWindowCurrent({ status: "picked_up", expires_at: expired.expires_at }, now)).toBe(true);
+    expect(isPickupWindowCurrent({ status: "completed", expires_at: expired.expires_at }, now)).toBe(true);
+  });
+
+  it("keeps donor-confirmed claimed requests claimable only once and excludes expired assigned tasks", () => {
+    const donorReview = donorWorkflowMigration.match(/create function public\.review_pickup_request[\s\S]*?\$\$;/i)?.[0] ?? "";
+    const claimRpc = volunteerWorkflowMigration.match(/create function public\.claim_volunteer_task[\s\S]*?\$\$;/i)?.[0] ?? "";
+    const listRpc = volunteerExpiryVisibilityMigration.match(/create or replace function public\.list_volunteer_tasks[\s\S]*?\$\$;/i)?.[0] ?? "";
+
+    expect(donorReview).toMatch(/update public\.donations\s+set status = 'claimed'/i);
+    expect(donorReview).toMatch(/update public\.pickup_requests\s+set status = 'confirmed'/i);
+    expect(listRpc).toMatch(/r\.volunteer_id is null[\s\S]*r\.status = 'confirmed'[\s\S]*d\.status = 'claimed'[\s\S]*d\.expires_at > pg_catalog\.now\(\)/i);
+    expect(listRpc).toMatch(/r\.volunteer_id = current_user_id[\s\S]*r\.status = 'confirmed'[\s\S]*d\.status = 'claimed'[\s\S]*d\.expires_at > pg_catalog\.now\(\)/i);
+    expect(claimRpc).toMatch(/for update/i);
+    expect(claimRpc).toMatch(/if assigned_volunteer_id is not null/i);
+    expect(claimRpc).toMatch(/where id = p_request_id and volunteer_id is null and status = 'confirmed'/i);
+  });
+
+  it("keeps the manual cleanup transaction pinned to the verified expired donation", () => {
+    expect(cleanupExpiredMealsScript).toMatch(/begin;\s+set local lock_timeout/i);
+    expect(cleanupExpiredMealsScript).toContain("45715a9b-5773-42a5-9317-ddabe309c52e");
+    expect(cleanupExpiredMealsScript).toContain("0d361edc-dba4-4132-be8b-b39babe226ae");
+    expect(cleanupExpiredMealsScript).toMatch(/food_name = 'Meals'/i);
+    expect(cleanupExpiredMealsScript).toMatch(/raise exception[\s\S]*transaction aborted/i);
+    expect(cleanupExpiredMealsScript).toMatch(/get diagnostics deleted_count = row_count/i);
   });
 
   it("maps pickup RPC readiness and authorization errors to useful messages", () => {

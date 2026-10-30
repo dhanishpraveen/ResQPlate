@@ -86,13 +86,30 @@ export function canConfirmDonorHandover(
 }
 
 export async function createDonation(client: Client, donorId: string, values: DonationWriteValues) {
+  if (!donorId.trim()) {
+    throw new Error("Your donor account could not be verified. Sign out and sign in again before saving.");
+  }
+
   const { data, error } = await client
     .from("donations")
     .insert({ donor_id: donorId, ...values })
     .select("id")
     .single();
   if (error) throw error;
+  if (!data?.id) throw new Error("The donation was not confirmed as saved. Refresh your donation history before retrying.");
   return data.id;
+}
+
+export async function reviewPickupRequest(
+  client: Client,
+  requestId: string,
+  action: "confirm" | "decline",
+) {
+  const { error } = await client.rpc("review_pickup_request", {
+    p_request_id: requestId,
+    p_action: action,
+  });
+  if (error) throw error;
 }
 
 export async function fetchDonations(client: Client, donorId: string) {

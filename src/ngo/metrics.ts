@@ -5,6 +5,11 @@ export type NgoDeliveryFilter = "all" | "scheduled" | "in_transit" | "completed"
 
 export function isAwaitingNgoVerification(request: NgoRequest) {
   return request.status === "picked_up"
+    && request.delivery_verification_status === "pending";
+}
+
+export function canConfirmNgoReceipt(request: NgoRequest) {
+  return request.status === "picked_up"
     && request.delivery_verification_status === "pending"
     && (request.volunteer_id === null || request.volunteer_delivered_at !== null);
 }

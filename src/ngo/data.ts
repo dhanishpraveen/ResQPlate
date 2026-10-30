@@ -67,6 +67,14 @@ export async function reportNgoDeliveryIssue(client: Client, requestId: string, 
   if (error) throw error;
 }
 
+export async function confirmNgoReceipt(client: Client, requestId: string, receivedQuantity: number) {
+  const { error } = await client.rpc("confirm_ngo_receipt", {
+    p_request_id: requestId,
+    p_received_quantity: receivedQuantity,
+  });
+  if (error) throw error;
+}
+
 export async function fetchActiveNgoRequest(client: Client, ngoId: string, donationId: string) {
   const { data, error } = await client
     .from("pickup_requests")

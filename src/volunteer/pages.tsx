@@ -42,6 +42,8 @@ import {
   distanceInKilometers,
   isPickupExpired,
   isAssignedVolunteerTask,
+  isAvailableVolunteerTask,
+  isPickupWindowCurrent,
   taskStatusLabel,
   taskDeliveryLabel,
   volunteerNavigationStage,
@@ -141,6 +143,21 @@ function useVolunteerTasks() {
   }, []);
 
   useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => {
+    function reloadOnFocus() {
+      void reload();
+    }
+    function reloadWhenVisible() {
+      if (document.visibilityState === "visible") void reload();
+    }
+
+    window.addEventListener("focus", reloadOnFocus);
+    document.addEventListener("visibilitychange", reloadWhenVisible);
+    return () => {
+      window.removeEventListener("focus", reloadOnFocus);
+      document.removeEventListener("visibilitychange", reloadWhenVisible);
+    };
+  }, [reload]);
   return { ...state, reload };
 }
 
@@ -154,7 +171,9 @@ function taskTone(status: VolunteerTask["status"]) {
 type VolunteerTaskFilter = "assigned" | "pickup_pending" | "picked_up" | "in_transit" | "drop_otp_pending" | "completed" | "issues";
 
 function matchesTaskFilter(task: VolunteerTask, filter: VolunteerTaskFilter) {
-  if (filter === "assigned" || filter === "pickup_pending") return task.status === "confirmed";
+  if (filter === "assigned" || filter === "pickup_pending") {
+    return task.status === "confirmed" && isPickupWindowCurrent(task);
+  }
   if (filter === "picked_up" || filter === "in_transit" || filter === "drop_otp_pending") return task.status === "picked_up";
   if (filter === "completed") return task.status === "completed";
   return false;
@@ -262,8 +281,8 @@ function VolunteerRouteMap({
 export function VolunteerDashboardPage() {
   const { data, error, loading, reload } = useVolunteerTasks();
   const assigned = data?.filter(isAssignedVolunteerTask) ?? [];
-  const availableCount = data?.filter((task) => !isAssignedVolunteerTask(task)).length ?? 0;
-  const active = assigned.filter((task) => task.status !== "completed");
+  const availableCount = data?.filter((task) => isAvailableVolunteerTask(task)).length ?? 0;
+  const active = assigned.filter((task) => task.status !== "completed" && isPickupWindowCurrent(task));
   const completed = assigned.filter((task) => task.status === "completed");
   const nextTask = active.find((task) => task.status === "confirmed") ?? active[0];
 
@@ -317,7 +336,7 @@ export function VolunteerAvailableTasksPage() {
   const { data, error, loading, reload } = useVolunteerTasks();
   const [search, setSearch] = useState("");
   const tasks = useMemo(() => (data ?? [])
-    .filter((task) => !isAssignedVolunteerTask(task))
+    .filter((task) => isAvailableVolunteerTask(task))
     .filter((task) => `${task.food_name} ${task.description}`.toLowerCase().includes(search.trim().toLowerCase())), [data, search]);
 
   return (

@@ -38,6 +38,7 @@ import { fetchSignedImages } from "../lib/storage";
 import {
   createNgoDocumentUrl,
   createPickupRequest,
+  confirmNgoReceipt,
   buildPickupRequestValues,
   fetchActiveNgoRequest,
   fetchAvailableDonations,
@@ -62,6 +63,7 @@ import {
   ngoRequestTone,
   summarizeNgoRequests,
   isAwaitingNgoVerification,
+  canConfirmNgoReceipt,
   type NgoDeliveryFilter,
   type NgoRequestFilter,
 } from "./metrics";
@@ -165,7 +167,12 @@ function useNgoRequests() {
       setState({ data: null, error: messageOf(error), loading: false });
     }
   }, [session]);
-  useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => {
+    void reload();
+    const refreshOnFocus = () => { void reload(); };
+    window.addEventListener("focus", refreshOnFocus);
+    return () => window.removeEventListener("focus", refreshOnFocus);
+  }, [reload]);
   return { ...state, reload };
 }
 
@@ -668,7 +675,12 @@ export function NgoRequestsPage() {
   const filtered = useMemo(() => filterNgoRequests(requests ?? [], filter).filter((request) => matchesNgoRequest(request, query)), [filter, query, requests]);
 
   return (
-    <NgoShell activeLabel="My Requests" title="My Requests" description="Track requests from submission through donor response and receipt.">
+    <NgoShell
+      activeLabel="My Requests"
+      action={<Button icon={<RefreshCw size={15} />} loading={loading} onClick={() => void reload()} variant="outline">Refresh</Button>}
+      title="My Requests"
+      description="Track requests from submission through donor response and receipt."
+    >
       <div className="ngo-page-stack">
         <label className="ngo-search"><Search aria-hidden="true" size={18} /><input aria-label="Search requests" onChange={(event) => setQuery(event.target.value)} placeholder="Search request or donation reference" value={query} /></label>
         <FilterTabs<NgoRequestFilter>
@@ -711,7 +723,14 @@ export function NgoDeliveriesPage() {
   }, [filter, requests, verificationFilter, verificationOnly]);
 
   return (
-    <NgoShell activeLabel={verificationOnly ? "Delivery Verification" : "My Deliveries"} title={verificationOnly ? "Delivery Verification" : "My Deliveries"} description={verificationOnly ? "Review volunteer deliveries and confirm or report receipt." : "Track donor-approved pickups and confirm food receipt."}>
+    <NgoShell
+      activeLabel={verificationOnly ? "Delivery Verification" : "My Deliveries"}
+      action={<Button icon={<RefreshCw size={15} />} loading={loading} onClick={() => void reload()} variant="outline">Refresh</Button>}
+      title={verificationOnly ? "Delivery Verification" : "My Deliveries"}
+      description={verificationOnly
+        ? "Generate delivery codes for active pickups, then confirm or report receipt."
+        : "Track donor-approved pickups and confirm food receipt."}
+    >
       <div className="ngo-page-stack">
         {!verificationOnly && <FilterTabs<NgoDeliveryFilter>
           label="Delivery status"
@@ -728,14 +747,14 @@ export function NgoDeliveriesPage() {
           label="Verification status"
           onChange={setVerificationFilter}
           options={[
-            { value: "pending", text: "Awaiting review" },
+            { value: "pending", text: "Needs action" },
             { value: "verified", text: "Verified" },
             { value: "issue_reported", text: "Issues" },
             { value: "all", text: "All" },
           ]}
           selected={verificationFilter}
         />}
-        <InlineAlert tone="info" title={verificationOnly ? "Receipt review" : "Volunteer assignment"}>{verificationOnly ? "Confirm receipt only after checking the delivered quantity and condition. Report an issue when the delivery needs follow-up." : "Accepted pickups are claimed by volunteers and progress updates appear here as collection and delivery are confirmed."}</InlineAlert>
+        <InlineAlert tone="info" title={verificationOnly ? "Delivery code and receipt review" : "Volunteer assignment"}>{verificationOnly ? "Delivery codes are available after collection is recorded. Confirm receipt only after checking the delivered quantity and condition; report an issue when follow-up is needed." : "Accepted pickups are claimed by volunteers and progress updates appear here as collection and delivery are confirmed."}</InlineAlert>
         {error && <ErrorState description={error} onRetry={() => void reload()} />}
         {loading ? <LoadingState label="Loading accepted pickups" /> : error ? null : deliveries.length
           ? <div className="ngo-card-list">{deliveries.map((request) => (
@@ -784,14 +803,14 @@ export function NgoDeliveryDetailsPage() {
   const [deliveryOtp, setDeliveryOtp] = useState<{ code: string; expiresAt: string } | null>(null);
   const [deliveryOtpLoading, setDeliveryOtpLoading] = useState(false);
   const [deliveryOtpError, setDeliveryOtpError] = useState<string | null>(null);
-  const canReviewDelivery = Boolean(state.data
-    && state.data.request.status === "picked_up"
-    && state.data.request.delivery_verification_status === "pending"
-    && (state.data.request.volunteer_id === null || state.data.request.volunteer_delivered_at !== null));
+  const [reloadKey, setReloadKey] = useState(0);
+  const canReviewDelivery = Boolean(state.data && canConfirmNgoReceipt(state.data.request));
   useEffect(() => {
     let active = true;
     async function load() {
       if (!supabase || !session) { setState({ data: null, error: supabaseConfigurationError ?? "Sign in to view this delivery.", loading: false }); return; }
+      setDeliveryOtp(null);
+      setDeliveryOtpError(null);
       setState({ data: null, error: null, loading: true });
       try {
         const request = await fetchNgoRequest(supabase, session.user.id, requestId);
@@ -830,8 +849,13 @@ export function NgoDeliveryDetailsPage() {
       }
     }
     void load();
-    return () => { active = false; };
-  }, [requestId, session]);
+    const refreshOnFocus = () => setReloadKey((key) => key + 1);
+    window.addEventListener("focus", refreshOnFocus);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refreshOnFocus);
+    };
+  }, [requestId, session, reloadKey]);
 
   async function generateDeliveryOtp() {
     if (!supabase || !state.data) return;
@@ -901,7 +925,10 @@ export function NgoDeliveryDetailsPage() {
     <NgoShell
       activeLabel={isDelivery ? "My Deliveries" : "My Requests"}
       title={isDelivery ? "Delivery Details" : "Request Details"}
-      action={<Link className="ngo-button-link ngo-button-link--outline" to={isDelivery ? "/ngo/deliveries" : "/ngo/requests"}><ArrowLeft size={15} /> Back to {isDelivery ? "deliveries" : "requests"}</Link>}
+      action={<div className="ngo-form-actions">
+        <Button icon={<RefreshCw size={15} />} loading={state.loading} onClick={() => setReloadKey((key) => key + 1)} variant="outline">Refresh</Button>
+        <Link className="ngo-button-link ngo-button-link--outline" to={isDelivery ? "/ngo/deliveries" : "/ngo/requests"}><ArrowLeft size={15} /> Back to {isDelivery ? "deliveries" : "requests"}</Link>
+      </div>}
     >
       {state.loading ? <LoadingState label="Loading delivery details" /> : state.error
         ? <ErrorState description={state.error} />
@@ -919,8 +946,7 @@ export function NgoDeliveryDetailsPage() {
             {state.data.request.volunteer_delivered_at && state.data.request.status !== "completed" && <InlineAlert tone="info" title="Delivered to your organization">A volunteer confirmed delivery on {dateLabel(state.data.request.volunteer_delivered_at)}. Confirm receipt to complete this request.</InlineAlert>}
             {state.data.request.delivery_verification_status === "verified" && <InlineAlert tone="success" title="Receipt verified">Your organization verified this delivery on {dateLabel(state.data.request.delivery_verified_at)}.</InlineAlert>}
             {state.data.request.delivery_verification_status === "issue_reported" && <InlineAlert tone="warning" title="Issue reported">{state.data.request.delivery_issue_reason}</InlineAlert>}
-            {isDelivery
-              && state.data.request.status === "picked_up"
+            {state.data.request.status === "picked_up"
               && state.data.request.delivery_verification_status === "pending"
               && state.data.request.volunteer_id
               && !state.data.request.volunteer_delivered_at
@@ -943,8 +969,8 @@ export function NgoDeliveryDetailsPage() {
                   <Button disabled={deliveryOtpLoading} onClick={() => void reloadDeliveryOtp()} type="button" variant="outline">Refresh code</Button>
                 </div>
               </section>}
-            {isDelivery && canReviewDelivery && <div className="ngo-form-actions">
-              <Link className="ngo-button-link" to={`/ngo/deliveries/${state.data.request.id}/receipt`}>Confirm food receipt</Link>
+            {canReviewDelivery && <div className="ngo-form-actions">
+              <Link className="ngo-button-link" to={`/ngo/deliveries/${state.data.request.id}/receipt`}>Confirm Receipt</Link>
             </div>}
             {isDelivery && canReviewDelivery && <form className="ngo-issue-form" onSubmit={(event) => void reportIssue(event)}>
               {issueError && <InlineAlert tone="danger">{issueError}</InlineAlert>}
@@ -993,24 +1019,25 @@ export function ConfirmNgoReceiptPage() {
 
   async function confirm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!supabase || !request) { setError(supabaseConfigurationError ?? "Receipt data is unavailable."); return; }
+    if (!supabase || !request || busy) { setError(supabaseConfigurationError ?? "Receipt data is unavailable."); return; }
     const received = Number(quantity);
     const validationError = validateReceiptQuantity(received, request.requested_quantity);
     if (validationError) { setError(validationError); return; }
-    if (request.status !== "picked_up" || request.delivery_verification_status !== "pending") { setError("This delivery is no longer awaiting receipt verification."); return; }
+    if (!canConfirmNgoReceipt(request)) { setError("The assigned volunteer must verify delivery before receipt can be confirmed."); return; }
     setBusy(true);
     setError(null);
-    const { error: receiptError } = await supabase.rpc("confirm_ngo_receipt", {
-      p_request_id: request.id,
-      p_received_quantity: received,
-    });
-    setBusy(false);
-    if (receiptError) { setError(receiptError.message); return; }
-    if (!await refreshProfile()) {
-      setError("Receipt was confirmed, but your application profile could not be reloaded. Refresh the page before continuing.");
-      return;
+    try {
+      await confirmNgoReceipt(supabase, request.id, received);
+      if (!await refreshProfile()) {
+        setError("Receipt was confirmed, but your application profile could not be reloaded. Refresh the page before continuing.");
+        return;
+      }
+      navigate(`/ngo/deliveries/${request.id}/receipt/confirmed`, { replace: true });
+    } catch (cause) {
+      setError(messageOf(cause));
+    } finally {
+      setBusy(false);
     }
-    navigate(`/ngo/deliveries/${request.id}/receipt/confirmed`, { replace: true });
   }
 
   return (
@@ -1021,7 +1048,7 @@ export function ConfirmNgoReceiptPage() {
           <Card className="ngo-form-card" padding="lg">
             {error && <InlineAlert tone="danger">{error}</InlineAlert>}
             <SectionHeading title="Receipt check" />
-            {(request.status !== "picked_up" || request.delivery_verification_status !== "pending") && <InlineAlert tone="warning">This delivery is no longer awaiting receipt verification. Current status: {ngoRequestLabel(request.status)}.</InlineAlert>}
+            {!canConfirmNgoReceipt(request) && <InlineAlert tone="warning">The assigned volunteer must verify delivery before receipt can be confirmed. Current status: {ngoRequestLabel(request.status)}.</InlineAlert>}
             <div className="ngo-detail-fields">
               <div><PackageCheck size={17} /><span><small>Request</small><strong>{request.id.slice(0, 8).toUpperCase()}</strong></span></div>
               <div><CalendarClock size={17} /><span><small>Scheduled pickup</small><strong>{dateLabel(request.pickup_at)}</strong></span></div>
@@ -1038,7 +1065,7 @@ export function ConfirmNgoReceiptPage() {
             <InlineAlert tone="info">Partial receipts and quality-evidence uploads are not supported by the current receipt RPC. Confirm only if the full handed-over quantity was received.</InlineAlert>
             <div className="ngo-form-actions">
               <Link className="ngo-button-link ngo-button-link--outline" to={`/ngo/deliveries/${request.id}`}>Back</Link>
-              <Button disabled={request.status !== "picked_up" || request.delivery_verification_status !== "pending"} loading={busy} type="submit">Confirm receipt</Button>
+              <Button disabled={!canConfirmNgoReceipt(request) || busy} loading={busy} type="submit">Confirm Receipt</Button>
             </div>
           </Card>
         </form>}

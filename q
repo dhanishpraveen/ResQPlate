@@ -1,0 +1,15 @@
+[33me2f1897[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m)[m fix:order workflow
+[33m857625c[m fix:mzp
+[33m5e60500[m feature:map in donor and ngo
+[33m8d185e5[m[33m ([m[1;31morigin/master[m[33m)[m fix:model deployment
+[33m74b1ab0[m Demo data->model train
+[33m8e33ba9[m model implementation starting
+[33m3bb0c43[m Redesign volunteer delivery details UI and improve task layout
+[33mcdc0426[m Update signup verification to 8-digit OTP input
+[33m4a6cb42[m Integrate end-to-end food delivery workflow and NGO verification
+[33mb8130b3[m Redesign volunteer delivery UI and add NGO delivery verification
+[33mbe1780a[m fix: remove NGO verification requirement for donation requests
+[33m31c9dd3[m feat: implement donor and NGO donation workflows
+[33m80ae3bc[m fix(auth): resolve render loop and stabilize onboarding
+[33mcbb667a[m feat(donor): implement donation management and pickup workflows
+[33mf9bb422[m feat(ui): establish ResQPlate design system and shared components

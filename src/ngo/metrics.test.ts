@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { NgoRequest } from "./data";
 import {
   filterNgoDeliveries,
+  canConfirmNgoReceipt,
   isAwaitingNgoVerification,
   filterNgoRequests,
   matchesNgoRequest,
@@ -67,16 +68,37 @@ describe("NGO request and delivery metrics", () => {
     expect(matchesNgoRequest(requests[0], "unrelated")).toBe(false);
   });
 
-  it("only exposes delivered assigned tasks for NGO verification", () => {
+  it("exposes collected tasks for NGO code generation and receipt verification", () => {
     expect(isAwaitingNgoVerification(request("pending-review", "picked_up"))).toBe(true);
     expect(isAwaitingNgoVerification({
-      ...request("not-delivered", "picked_up"),
+      ...request("awaiting-volunteer-delivery", "picked_up"),
       volunteer_id: "volunteer-1",
       volunteer_delivered_at: null,
-    })).toBe(false);
+    })).toBe(true);
     expect(isAwaitingNgoVerification({
       ...request("verified", "completed"),
       delivery_verification_status: "verified",
+    })).toBe(false);
+  });
+
+  it("allows NGO receipt confirmation only after an assigned volunteer confirms delivery", () => {
+    expect(canConfirmNgoReceipt({
+      ...request("otp-verified", "picked_up"),
+      volunteer_id: "volunteer-1",
+      volunteer_delivered_at: "2026-10-29T11:00:00.000Z",
+    })).toBe(true);
+
+    expect(canConfirmNgoReceipt({
+      ...request("otp-pending", "picked_up"),
+      volunteer_id: "volunteer-1",
+      volunteer_delivered_at: null,
+    })).toBe(false);
+
+    expect(canConfirmNgoReceipt({
+      ...request("already-reviewed", "picked_up"),
+      volunteer_id: "volunteer-1",
+      volunteer_delivered_at: "2026-10-29T11:00:00.000Z",
+      delivery_verification_status: "issue_reported",
     })).toBe(false);
   });
 });

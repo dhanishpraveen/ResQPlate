@@ -124,6 +124,10 @@ export function isPickupExpired(expiresAt: string, now = Date.now()) {
   return Number.isFinite(expiresAtTime) && expiresAtTime <= now;
 }
 
+export function isPickupWindowCurrent(task: Pick<VolunteerTask, "status" | "expires_at">, now = Date.now()) {
+  return task.status !== "confirmed" || !isPickupExpired(task.expires_at, now);
+}
+
 export function volunteerPickupErrorMessage(error: unknown) {
   const message = typeof error === "object" && error !== null && "message" in error
     && typeof error.message === "string"
@@ -146,6 +150,12 @@ export function isAssignedVolunteerTask(task: VolunteerTask) {
   return typeof task.volunteer_assigned === "boolean"
     ? task.volunteer_assigned
     : task.pickup_address !== null;
+}
+
+export function isAvailableVolunteerTask(task: VolunteerTask, now = Date.now()) {
+  return task.status === "confirmed"
+    && !isAssignedVolunteerTask(task)
+    && isPickupWindowCurrent(task, now);
 }
 
 export function taskStatusLabel(status: VolunteerTask["status"]) {

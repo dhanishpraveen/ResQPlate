@@ -1,11 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { AvailableDonationsPage, NgoDashboardPage, NgoDeliveryDetailsPage, NgoDonationDetailsPage, RequestPickupPage } from "./pages";
-import type { NgoDonation } from "./data";
+import { AvailableDonationsPage, ConfirmNgoReceiptPage, NgoDashboardPage, NgoDeliveriesPage, NgoDeliveryDetailsPage, NgoDonationDetailsPage, ReceiptConfirmedPage, RequestPickupPage } from "./pages";
+import type { NgoDonation, NgoRequest } from "./data";
 import { useAuth } from "../auth/AuthContext";
 import {
   createPickupRequest,
+  confirmNgoReceipt,
   fetchActiveNgoRequest,
   fetchAvailableDonations,
   fetchDonation,
@@ -17,7 +18,7 @@ import {
 } from "./data";
 import { fetchSignedImages } from "../lib/storage";
 
-const mocks = vi.hoisted(() => ({ invoke: vi.fn() }));
+const mocks = vi.hoisted(() => ({ invoke: vi.fn(), confirmNgoReceipt: vi.fn() }));
 
 vi.mock("../auth/AuthContext", () => ({
   useAuth: vi.fn(),
@@ -36,6 +37,7 @@ vi.mock("./data", () => ({
   buildPickupRequestValues: (input: unknown) => input,
   fetchAvailableDonations: vi.fn(),
   createPickupRequest: vi.fn(),
+  confirmNgoReceipt: mocks.confirmNgoReceipt,
   fetchActiveNgoRequest: vi.fn(),
   fetchDonation: vi.fn(),
   fetchHandover: vi.fn(),
@@ -59,6 +61,27 @@ const donation = (overrides: Partial<NgoDonation> = {}): NgoDonation => ({
   status: "available",
   created_at: "2026-10-29T10:00:00.000Z",
   photo_path: null,
+  ...overrides,
+});
+
+const receiptRequest = (overrides: Partial<NgoRequest> = {}): NgoRequest => ({
+  id: "request-otp-1",
+  donation_id: "donation-1",
+  ngo_id: "ngo-1",
+  requested_quantity: 12,
+  pickup_at: null,
+  notes: null,
+  status: "picked_up",
+  received_quantity: null,
+  receipt_confirmed_at: null,
+  created_at: "2026-10-29T10:00:00.000Z",
+  updated_at: "2026-10-29T10:00:00.000Z",
+  volunteer_id: "volunteer-1",
+  volunteer_picked_up_at: "2026-10-29T11:00:00.000Z",
+  volunteer_delivered_at: "2026-10-29T12:00:00.000Z",
+  delivery_verification_status: "pending",
+  delivery_verified_at: null,
+  delivery_issue_reason: null,
   ...overrides,
 });
 
@@ -317,6 +340,8 @@ describe("NGO available donations screen", () => {
 
 describe("NGO in-app delivery verification", () => {
   beforeEach(() => {
+    vi.mocked(fetchNgoRequests).mockReset().mockResolvedValue([]);
+    vi.mocked(confirmNgoReceipt).mockReset().mockResolvedValue(undefined);
     vi.mocked(useAuth).mockReturnValue({
       session: { user: { id: "ngo-1", email: "ngo@example.org" } } as ReturnType<typeof useAuth>["session"],
       profile: null,
@@ -325,25 +350,9 @@ describe("NGO in-app delivery verification", () => {
       profileError: null,
       refreshProfile: async () => true,
     });
-    vi.mocked(fetchNgoRequest).mockReset().mockResolvedValue({
-      id: "request-otp-1",
-      donation_id: "donation-1",
-      ngo_id: "ngo-1",
-      requested_quantity: 12,
-      pickup_at: null,
-      notes: null,
-      status: "picked_up",
-      received_quantity: null,
-      receipt_confirmed_at: null,
-      created_at: "2026-10-29T10:00:00.000Z",
-      updated_at: "2026-10-29T10:00:00.000Z",
-      volunteer_id: "volunteer-1",
-      volunteer_picked_up_at: "2026-10-29T11:00:00.000Z",
+    vi.mocked(fetchNgoRequest).mockReset().mockResolvedValue(receiptRequest({
       volunteer_delivered_at: null,
-      delivery_verification_status: "pending",
-      delivery_verified_at: null,
-      delivery_issue_reason: null,
-    } as never);
+    }));
     vi.mocked(fetchHandover).mockReset().mockResolvedValue(null);
     vi.mocked(fetchRequestHistory).mockReset().mockResolvedValue([]);
     mocks.invoke.mockReset().mockResolvedValue({
@@ -383,5 +392,255 @@ describe("NGO in-app delivery verification", () => {
     expect(mocks.invoke).toHaveBeenNthCalledWith(2, "delivery-otp", {
       body: { action: "ngo_issue", request_id: "request-otp-1" },
     });
+  });
+
+  it("shows the code from the request details route linked by My Requests", async () => {
+    render(
+      <MemoryRouter initialEntries={["/ngo/requests/request-otp-1"]}>
+        <Routes>
+          <Route element={<NgoDeliveryDetailsPage />} path="/ngo/requests/:requestId" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByLabelText("Active delivery code")).toHaveTextContent("0072");
+    expect(mocks.invoke).toHaveBeenCalledWith("delivery-otp", {
+      body: { action: "ngo_get", request_id: "request-otp-1" },
+    });
+  });
+
+  it("shows a loading state while checking for an active code", async () => {
+    let resolveInvocation!: (result: {
+      data: { ok: true; active: true; otp: string; expires_at: string };
+      error: null;
+    }) => void;
+    mocks.invoke.mockReturnValueOnce(new Promise((resolve) => { resolveInvocation = resolve; }));
+
+    render(
+      <MemoryRouter initialEntries={["/ngo/deliveries/request-otp-1"]}>
+        <Routes>
+          <Route element={<NgoDeliveryDetailsPage />} path="/ngo/deliveries/:requestId" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledOnce());
+    expect(screen.getByText("Checking active delivery code")).toBeInTheDocument();
+    resolveInvocation({
+      data: { ok: true, active: true, otp: "0072", expires_at: "2026-10-30T01:00:00.000Z" },
+      error: null,
+    });
+    expect(await screen.findByLabelText("Active delivery code")).toHaveTextContent("0072");
+  });
+
+  it("lists collected pickups awaiting an OTP in Delivery Verification", async () => {
+    vi.mocked(fetchNgoRequests).mockResolvedValue([{
+      id: "request-otp-1",
+      donation_id: "donation-1",
+      ngo_id: "ngo-1",
+      requested_quantity: 12,
+      pickup_at: null,
+      notes: null,
+      status: "picked_up",
+      received_quantity: null,
+      receipt_confirmed_at: null,
+      created_at: "2026-10-29T10:00:00.000Z",
+      updated_at: "2026-10-29T10:00:00.000Z",
+      volunteer_id: "volunteer-1",
+      volunteer_picked_up_at: "2026-10-29T11:00:00.000Z",
+      volunteer_delivered_at: null,
+      delivery_verification_status: "pending",
+      delivery_verified_at: null,
+      delivery_issue_reason: null,
+    }] as never);
+
+    render(
+      <MemoryRouter initialEntries={["/ngo/verification"]}>
+        <Routes>
+          <Route element={<NgoDeliveriesPage />} path="/ngo/verification" />
+          <Route element={<NgoDeliveryDetailsPage />} path="/ngo/deliveries/:requestId" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("link", { name: "View details" }));
+    expect(await screen.findByLabelText("Active delivery code")).toHaveTextContent("0072");
+    expect(mocks.invoke).toHaveBeenCalledWith("delivery-otp", {
+      body: { action: "ngo_get", request_id: "request-otp-1" },
+    });
+  });
+
+  it("refreshes request status after returning to the NGO tab", async () => {
+    const requestBeforePickup = {
+      id: "request-otp-1",
+      donation_id: "donation-1",
+      ngo_id: "ngo-1",
+      requested_quantity: 12,
+      pickup_at: null,
+      notes: null,
+      status: "confirmed",
+      received_quantity: null,
+      receipt_confirmed_at: null,
+      created_at: "2026-10-29T10:00:00.000Z",
+      updated_at: "2026-10-29T10:00:00.000Z",
+      volunteer_id: "volunteer-1",
+      volunteer_picked_up_at: null,
+      volunteer_delivered_at: null,
+      delivery_verification_status: "pending",
+      delivery_verified_at: null,
+      delivery_issue_reason: null,
+    };
+    vi.mocked(fetchNgoRequest)
+      .mockReset()
+      .mockResolvedValueOnce(requestBeforePickup as never)
+      .mockResolvedValueOnce({
+        ...requestBeforePickup,
+        status: "picked_up",
+        volunteer_picked_up_at: "2026-10-29T11:00:00.000Z",
+      } as never);
+
+    render(
+      <MemoryRouter initialEntries={["/ngo/requests/request-otp-1"]}>
+        <Routes>
+          <Route element={<NgoDeliveryDetailsPage />} path="/ngo/requests/:requestId" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Accepted")).toBeInTheDocument();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    fireEvent.focus(window);
+
+    expect(await screen.findByLabelText("Active delivery code")).toHaveTextContent("0072");
+    expect(fetchNgoRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces a safe OTP retrieval error instead of hiding it", async () => {
+    mocks.invoke.mockResolvedValueOnce({
+      data: null,
+      error: {
+        context: new Response(JSON.stringify({ error: "The delivery code could not be loaded." }), { status: 500 }),
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/ngo/requests/request-otp-1"]}>
+        <Routes>
+          <Route element={<NgoDeliveryDetailsPage />} path="/ngo/requests/:requestId" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("The delivery code could not be loaded.")).toBeInTheDocument();
+  });
+
+  it("shows Confirm Receipt from NGO request details after delivery OTP verification", async () => {
+    vi.mocked(fetchNgoRequest).mockResolvedValue(receiptRequest());
+
+    render(
+      <MemoryRouter initialEntries={["/ngo/requests/request-otp-1"]}>
+        <Routes>
+          <Route element={<NgoDeliveryDetailsPage />} path="/ngo/requests/:requestId" />
+          <Route element={<ConfirmNgoReceiptPage />} path="/ngo/deliveries/:requestId/receipt" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Delivered to your organization")).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Confirm Receipt" })).toHaveAttribute(
+      "href",
+      "/ngo/deliveries/request-otp-1/receipt",
+    );
+  });
+
+  it("does not allow receipt confirmation while the assigned volunteer has not verified delivery", async () => {
+    vi.mocked(fetchNgoRequest).mockResolvedValue(receiptRequest({ volunteer_delivered_at: null }));
+
+    render(
+      <MemoryRouter initialEntries={["/ngo/requests/request-otp-1"]}>
+        <Routes>
+          <Route element={<NgoDeliveryDetailsPage />} path="/ngo/requests/:requestId" />
+          <Route element={<ConfirmNgoReceiptPage />} path="/ngo/deliveries/:requestId/receipt" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect((await screen.findAllByText("Food collected")).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: "Confirm Receipt" })).not.toBeInTheDocument();
+    cleanup();
+
+    render(
+      <MemoryRouter initialEntries={["/ngo/deliveries/request-otp-1/receipt"]}>
+        <Routes>
+          <Route element={<ConfirmNgoReceiptPage />} path="/ngo/deliveries/:requestId/receipt" />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("button", { name: "Confirm Receipt" })).toBeDisabled();
+    expect(screen.getByText(/must verify delivery before receipt can be confirmed/i)).toBeInTheDocument();
+    expect(confirmNgoReceipt).not.toHaveBeenCalled();
+  });
+
+  it("does not expose receipt confirmation when the request is not owned by the current NGO", async () => {
+    vi.mocked(fetchNgoRequest).mockResolvedValue(null);
+
+    render(
+      <MemoryRouter initialEntries={["/ngo/requests/request-otp-1"]}>
+        <Routes>
+          <Route element={<NgoDeliveryDetailsPage />} path="/ngo/requests/:requestId" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/does not belong to your organization/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Confirm Receipt" })).not.toBeInTheDocument();
+    expect(confirmNgoReceipt).not.toHaveBeenCalled();
+  });
+
+  it("confirms a verified delivery and displays the persisted completed state", async () => {
+    const deliveredRequest = receiptRequest();
+    const completedRequest = receiptRequest({
+      status: "completed",
+      received_quantity: 12,
+      receipt_confirmed_at: "2026-10-29T13:00:00.000Z",
+      delivery_verification_status: "verified",
+      delivery_verified_at: "2026-10-29T13:00:00.000Z",
+    });
+    vi.mocked(fetchNgoRequest)
+      .mockResolvedValueOnce(deliveredRequest)
+      .mockResolvedValueOnce(completedRequest);
+
+    render(
+      <MemoryRouter initialEntries={["/ngo/deliveries/request-otp-1/receipt"]}>
+        <Routes>
+          <Route element={<ConfirmNgoReceiptPage />} path="/ngo/deliveries/:requestId/receipt" />
+          <Route element={<ReceiptConfirmedPage />} path="/ngo/deliveries/:requestId/receipt/confirmed" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm Receipt" }));
+    expect(await screen.findByRole("heading", { name: "Receipt Confirmed!" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Food receipt confirmed" })).toBeInTheDocument();
+    expect(confirmNgoReceipt).toHaveBeenCalledWith(expect.anything(), "request-otp-1", 12);
+  });
+
+  it("displays receipt RPC errors without showing false success", async () => {
+    vi.mocked(fetchNgoRequest).mockResolvedValue(receiptRequest());
+    vi.mocked(confirmNgoReceipt).mockRejectedValue(new Error("Receipt quantity does not match the handover"));
+
+    render(
+      <MemoryRouter initialEntries={["/ngo/deliveries/request-otp-1/receipt"]}>
+        <Routes>
+          <Route element={<ConfirmNgoReceiptPage />} path="/ngo/deliveries/:requestId/receipt" />
+          <Route element={<ReceiptConfirmedPage />} path="/ngo/deliveries/:requestId/receipt/confirmed" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm Receipt" }));
+    expect(await screen.findByText("Receipt quantity does not match the handover")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Receipt Confirmed!" })).not.toBeInTheDocument();
+    expect(confirmNgoReceipt).toHaveBeenCalledTimes(1);
   });
 });

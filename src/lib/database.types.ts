@@ -161,6 +161,16 @@ type SurplusForecast = {
   updated_at: string;
 };
 
+type ForecastOutcome = {
+  forecast_id: string;
+  actual_surplus_quantity: number;
+  unit: string;
+  actual_sales: number | null;
+  actual_customers: number | null;
+  observed_at: string;
+  created_at: string;
+};
+
 type NgoDemandRequirement = {
   id: string;
   ngo_id: string;
@@ -269,6 +279,12 @@ export type Database = {
           Partial<Pick<SurplusForecast, "historical_sales" | "historical_leftover" | "training_data_source">> &
           Partial<Pick<SurplusForecast, "status" | "confirmed_quantity" | "actual_ready_at">>,
         Partial<Pick<SurplusForecast, "food_category" | "restaurant_type" | "meal_period" | "planned_quantity" | "expected_customers" | "historical_sales" | "historical_leftover" | "training_data_source" | "ready_at" | "status" | "confirmed_quantity" | "actual_ready_at">>
+      >;
+      forecast_outcomes: Table<
+        ForecastOutcome,
+        Pick<ForecastOutcome, "forecast_id" | "actual_surplus_quantity" | "unit" | "observed_at"> &
+          Partial<Pick<ForecastOutcome, "actual_sales" | "actual_customers">>,
+        never
       >;
       ngo_demand_requirements: Table<
         NgoDemandRequirement,

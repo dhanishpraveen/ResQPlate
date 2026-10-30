@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import type { VolunteerTask } from "./data";
-import { VolunteerTaskDetailsPage } from "./pages";
+import { VolunteerAvailableTasksPage, VolunteerTaskDetailsPage } from "./pages";
 
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
@@ -27,7 +27,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const task = (): VolunteerTask => ({
+const task = (overrides: Partial<VolunteerTask> = {}): VolunteerTask => ({
   request_id: "request-0001",
   donation_id: "donation-0001",
   food_name: "Meal boxes",
@@ -53,9 +53,11 @@ const task = (): VolunteerTask => ({
   dropoff_latitude: 12.9352,
   dropoff_longitude: 77.6245,
   volunteer_assigned: false,
+  ...overrides,
 });
 
 let currentTask: VolunteerTask;
+let taskRowsOverride: VolunteerTask[] | null;
 
 function renderTaskPage() {
   return render(
@@ -67,11 +69,24 @@ function renderTaskPage() {
   );
 }
 
+function renderAvailableTasksPage() {
+  return render(
+    <MemoryRouter initialEntries={["/volunteer/tasks/available"]}>
+      <Routes>
+        <Route element={<VolunteerAvailableTasksPage />} path="/volunteer/tasks/available" />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("volunteer task navigation stages", () => {
   beforeEach(() => {
     currentTask = task();
+    taskRowsOverride = null;
     mocks.rpc.mockReset().mockImplementation(async (name: string) => {
-      if (name === "list_volunteer_tasks") return { data: [{ ...currentTask }], error: null };
+      if (name === "list_volunteer_tasks") {
+        return { data: (taskRowsOverride ?? [currentTask]).map((row) => ({ ...row })), error: null };
+      }
       if (name === "claim_volunteer_task") currentTask = { ...currentTask, volunteer_assigned: true };
       if (name === "volunteer_confirm_pickup") {
         currentTask = {
@@ -92,6 +107,42 @@ describe("volunteer task navigation stages", () => {
       session: { user: { id: "volunteer-1", email: "volunteer@example.org" } } as ReturnType<typeof useAuth>["session"],
       profile: { full_name: "Volunteer" } as ReturnType<typeof useAuth>["profile"],
     } as ReturnType<typeof useAuth>);
+  });
+
+  it("refreshes available tasks when the volunteer returns to the page", async () => {
+    taskRowsOverride = [];
+    renderAvailableTasksPage();
+    expect(await screen.findByText("No available tasks")).toBeInTheDocument();
+
+    taskRowsOverride = [task({ food_name: "Biryani", expires_at: "2999-01-01T00:00:00.000Z" })];
+    fireEvent(window, new Event("focus"));
+
+    await waitFor(() => expect(mocks.rpc).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("heading", { name: "Biryani" })).toBeInTheDocument();
+    expect(mocks.rpc).toHaveBeenCalledWith("list_volunteer_tasks");
+  });
+
+  it("shows confirmed unassigned Biryani and excludes assigned and expired tasks", async () => {
+    taskRowsOverride = [
+      task({ food_name: "Biryani", expires_at: "2999-01-01T00:00:00.000Z" }),
+      task({
+        request_id: "assigned-request",
+        food_name: "Assigned meal",
+        volunteer_assigned: true,
+        expires_at: "2999-01-01T00:00:00.000Z",
+      }),
+      task({
+        request_id: "expired-request",
+        food_name: "Expired meal",
+        expires_at: "2000-01-01T00:00:00.000Z",
+      }),
+    ];
+
+    renderAvailableTasksPage();
+
+    expect(await screen.findByRole("heading", { name: "Biryani" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Assigned meal" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Expired meal" })).not.toBeInTheDocument();
   });
 
   it("shows both addresses and distance before acceptance without a map or location request", async () => {

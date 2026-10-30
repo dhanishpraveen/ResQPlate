@@ -598,6 +598,169 @@ already complete.
   `ML_SERVICE_URL`; production accuracy remains limited by synthetic training
   data until real historical records are supplied.
 
+### ML Phase 1: forecast outcome collection
+
+- Added the forward migration
+  `supabase/migrations/20261030023000_forecast_outcome_records.sql`. It creates
+  one append-only `forecast_outcomes` row per forecast with measured edible
+  surplus, matching unit, optional actual sales/customer counts, and the
+  observation timestamp. A primary key prevents duplicate submissions;
+  constraints reject negative measurements.
+- RLS scopes reads and inserts through the linked forecast owner, requires
+  the recorded unit to match the forecast, and requires the observation time
+  to be after the forecast ready time and no later than database current time.
+  Authenticated users receive only select/insert table privileges; the
+  outcome table does not grant update or delete.
+- Updated local TypeScript database types, outcome data access/validation,
+  and the existing donor forecast history UI. Outcome capture is offered only
+  after the forecast ready time. Prediction, donor confirmation, measured
+  surplus, and delivered quantity remain distinct values. The inventory does
+  not depict a separate forecast-outcome screen; the form extends the existing
+  forecast history panel with established donor UI controls and tokens.
+- No historical labels were generated, no model behavior was changed, and no
+  live schema/data changes were made. The new migration remains unapplied and
+  must be reviewed and applied manually before outcome reads/submissions can
+  succeed. Existing forecast history remains visible if outcome loading is
+  unavailable; the UI disables recording until outcome history can be read.
+- Verification: all 119 tests passed, TypeScript typecheck and production
+  build passed, and `git diff --check` passed. The build retains the existing
+  large-chunk warning. These checks do not verify the migration against the
+  hosted database; apply it manually, then verify donor ownership and
+  duplicate rejection in the intended environment.
+
+### ML Phase 2: evaluation and training pipeline preparation
+
+- Added `ml_service/evaluation.py` and the standalone
+  `python -m ml_service.evaluate` command. Real data must include linked
+  `actual_surplus_quantity` and measurement timestamps; only that outcome
+  column becomes the model target. Donor confirmations, predictions, delivery
+  quantities, actual sales, and actual customers are not used as target or
+  predictive features. Data is filtered to one unit per run.
+- The evaluation uses chronological 60/20/20 train/validation/test splits,
+  trains candidates on training rows only, chooses Ridge or Random Forest
+  using validation MAE, reports test MAE/RMSE against training-mean and fixed
+  8%-of-planned baselines, and reports a separate test subset for donors not
+  present in training. Tied ready timestamps are kept within the same split.
+  Configured minimum split sizes are 20/10/10; below them, no models are fit.
+  Evaluation never writes or replaces a model artifact or changes inference.
+- **Real data status:** no local `forecast_outcomes.csv` export exists. The
+  migration is present locally; whether it has been applied to Supabase and
+  whether live outcome rows exist were not checked. The real-data evaluator
+  therefore reports 0 rows and `insufficient_data`; no real-data metrics are
+  claimed.
+- **Synthetic demonstration only:** 1,200 servings rows, chronologically split
+  into train 720, validation 240 (2024-12-21 through 2025-08-17), and test
+  240 (2025-08-18 through 2026-04-14). Test MAE/RMSE: training mean
+  12.046/14.734; fixed 8% rate 8.194/11.334; Ridge 6.683/9.344; Random
+  Forest 6.814/9.699 servings. Ridge had the lower validation MAE in this
+  generated dataset. No donor was unseen in its test subset. These synthetic
+  results are not production accuracy and do not justify changing the current
+  model.
+- Documented the export contract and commands in
+  `ml_service/data/README.md`. Verification: 19 Python evaluation/model/
+  matching tests passed; `npm test` passed (119 tests); typecheck, production
+  build, and `git diff --check` passed. Build has the existing large-chunk
+  warning. The Python environment used 3.14.2, pandas 3.0.0, scikit-learn
+  1.9.1, and pytest 9.1.1; the repository caps pandas below 3.0, so rerun in
+  the declared dependency environment before treating runtime compatibility
+  as verified.
+
+### ML Phase 3: validate real outcome exports
+
+- Added a strict sanitized export contract and `--validate-outcomes` CLI mode.
+  Reports include aggregate missing-value counts, duplicate pseudonym counts,
+  unit counts/mismatches, observation-date ranges, invalid-row counts, and
+  chronological per-unit split counts/readiness. They do not include donor
+  names, contact details, pseudonym values, or raw identifiers.
+- Added an HMAC pseudonymization helper for forecast and donor UUIDs. The
+  evaluator rejects unexpected/private columns and malformed pseudonyms, and
+  accepts only `actual_surplus_quantity` as its measured target. Missing
+  outcomes remain distinct from valid zero-surplus observations. Invalid
+  quantities, duplicates, unknown/inconsistent units, and bad observation
+  times prevent evaluation.
+- Documented every CSV column, an illustrative sanitized row, the RLS-scoped
+  authenticated export workflow, pseudonymization, validation, and evaluation
+  commands in `ml_service/data/README.md`. No migration was applied, no live
+  records were queried or changed, and the migration's hosted status remains
+  unverified. No real-data export exists locally.
+- No production model, prediction API, or live data changed. The current
+  environment uses pandas 3.0.0 although `ml_service/requirements.txt`
+  specifies pandas below 3.0; this is recorded as a validation limitation.
+- **Verification:** 28 Python ML tests and 119 frontend tests passed;
+  `npm run typecheck`, `npm run build`, and `git diff --check` passed. The
+  production build reports the existing large-chunk warning. The default
+  evaluator path reports zero rows and insufficient data when there is no
+  local export; validation reports `no_export`.
+
+### ML Phase 4: outcome collection readiness audit
+
+- Confirmed the donor forecast history associates a form with its own forecast
+  ID, blocks recording until the forecast ready time has passed, validates
+  measured surplus (including zero), and submits `forecast_id`, matching unit,
+  and observation timestamp. Existing list/insert helpers use the authenticated
+  Supabase client and rely on forecast-owner RLS for donor scoping.
+- Audited the outcome table constraints, grants, RLS policies, frontend
+  queries, and TypeScript shape. Corrected the generated Insert type so
+  non-null `observed_at` is required. Added a static migration regression test
+  asserting that outcome reads and inserts are owner-scoped; this is not a
+  substitute for a live cross-account RLS test.
+- **Schema follow-up:** PostgreSQL 17 documents numeric `NaN`, `Infinity`, and
+  `-Infinity`; its `NaN` sorts greater than all non-NaN numeric values, so the
+  existing non-negative checks alone do not reject it. Added the forward-only
+  `20261030041800_forecast_outcome_finite_numeric_checks.sql`, which rejects
+  all three special values while preserving valid zero and nullable sales.
+  The migration includes a disposable-database verification query. It was not
+  applied or executed against a database.
+- Read-only hosted migration history does not contain
+  `20261030023000_forecast_outcome_records`. Read-only table metadata does
+  show `public.forecast_outcomes` exists with RLS enabled, zero rows, expected
+  columns, primary key, foreign key, and the original non-negative checks.
+  This confirms a schema/history conflict, not a missing hosted table. The
+  metadata did not expose policy definitions or grants. No hosted SQL or live
+  data was changed. Do not replay the original migration or push migrations
+  until the complete schema, policies, grants, and migration history are
+  reconciled.
+- Python CSV readers now preserve literal `NaN` tokens rather than treating
+  them as blank optional fields; validation can reject non-finite values
+  distinctly from NULL.
+- Confirmed no CSV export UI/path exists. Documented the minimal safe
+  donor-scoped option: reuse the existing RLS-protected forecast and outcome
+  list helpers, join by forecast ID in memory, preserve missing outcomes as
+  empty fields, and pseudonymize locally. No cross-donor or service-role
+  browser export was introduced.
+- Active Python is 3.14.2 with pandas 3.0.0, numpy 2.4.2, and scikit-learn
+  1.9.1. `ml_service/requirements.txt` excludes pandas 3.0; Python tests run
+  in this environment do not verify compatibility with the declared
+  dependency range. No compatible Python runtime or virtual environment is
+  installed; use an isolated Python 3.13 environment after installing that
+  runtime side-by-side.
+
+### ML Phase 5: safe outcome migration readiness
+
+- Added the finite-numeric forward migration without editing the potentially
+  applied original migration. Its PostgreSQL 17 syntax uses `NOT IN` against
+  quoted numeric special values; the optional sales constraint explicitly
+  permits NULL and zero.
+- Tests cover zero surplus, NULL optional sales/customer counts, negative and
+  non-finite browser quantities, SQL finite constraints, owner-scoped
+  read/insert policies, unit matching, and missing outcomes versus measured
+  zero. Python export tests check that CSV literal `NaN` is not silently
+  normalized to an optional NULL.
+- Hosted history still lacks the original outcome migration entry, while the
+  read-only table listing confirms the outcome table exists. This requires
+  manual migration-history reconciliation; do not run `supabase db push` or
+  replay the original create-table migration until all local/hosted drift is
+  reviewed. Live policy/grant definitions remain unverified.
+- **Verification:** to be recorded after Phase 5 checks. Python currently
+  runs under 3.14.2 with pandas 3.0.0, outside the declared pandas `<3`
+  range; use the documented isolated Python 3.13 environment for compatible
+  test results. The compatible-range result remains unverified. In the
+  current environment, 29 Python ML tests passed; the first full frontend run
+  had one unrelated reverse-geocoding test failure, while that test passed
+  in isolation and the subsequent full suite passed (124 tests). Typecheck,
+  production build, and diff checks passed; the build retains the existing
+  large-chunk warning.
+
 ## Phase 6: Shared functionality
 
 - **Objectives:** messaging, notifications, shared profile patterns, settings,

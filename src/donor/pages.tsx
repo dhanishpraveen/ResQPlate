@@ -44,6 +44,7 @@ import {
   fetchDonations,
   fetchPickupRequests,
   fetchPickupRequestVolunteerAssignment,
+  reviewPickupRequest,
   fetchSignedImages,
   buildDonationWriteValues,
   formatDonationSaveError,
@@ -56,8 +57,16 @@ import {
 } from "./data";
 import { calculateDonorImpact, displayedDonationStatus, formatQuantity, monthlyCompletedSummary } from "./metrics";
 import { validateDonation, validateFoodImage, type DonationDraft } from "./validation";
-import { listDonorForecasts, type ForecastPrediction } from "../ai/data";
+import {
+  createForecastOutcome,
+  listDonorForecastOutcomes,
+  listDonorForecasts,
+  type ForecastOutcome,
+  type ForecastOutcomeInsert,
+  type ForecastPrediction,
+} from "../ai/data";
 import { predictSurplus } from "../ai/api";
+import { ForecastOutcomeForm } from "../ai/ForecastOutcomeForm";
 
 type LoadState<T> = { data: T; error: null; loading: false } | { data: null; error: string; loading: false } | { data: null; error: null; loading: true };
 
@@ -305,6 +314,10 @@ export function DonorForecastPage() {
   });
   const [prediction, setPrediction] = useState<ForecastPrediction | null>(null);
   const [forecasts, setForecasts] = useState<Awaited<ReturnType<typeof listDonorForecasts>>>([]);
+  const [outcomes, setOutcomes] = useState<ForecastOutcome[]>([]);
+  const [outcomesAvailable, setOutcomesAvailable] = useState(false);
+  const [activeOutcomeForecastId, setActiveOutcomeForecastId] = useState<string | null>(null);
+  const [savingOutcomeForecastId, setSavingOutcomeForecastId] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -316,7 +329,11 @@ export function DonorForecastPage() {
       return;
     }
     try {
-      setForecasts(await listDonorForecasts(supabase));
+      const forecastRows = await listDonorForecasts(supabase);
+      setForecasts(forecastRows);
+      const outcomeRows = await listDonorForecastOutcomes(supabase);
+      setOutcomes(outcomeRows);
+      setOutcomesAvailable(true);
     } catch (cause) {
       setError(messageOf(cause));
     } finally {
@@ -372,6 +389,28 @@ export function DonorForecastPage() {
     }
   }
 
+  async function submitOutcome(input: ForecastOutcomeInsert) {
+    if (!supabase || !session || savingOutcomeForecastId) {
+      setError(supabaseConfigurationError ?? "Sign in as a donor to record an outcome.");
+      return;
+    }
+
+    setSavingOutcomeForecastId(input.forecast_id);
+    setError(null);
+    setSuccess(null);
+    try {
+      const outcome = await createForecastOutcome(supabase, input);
+      setOutcomes((current) => [...current, outcome]);
+      setOutcomesAvailable(true);
+      setActiveOutcomeForecastId(null);
+      setSuccess("Observed surplus outcome recorded. Forecast and delivery quantities remain unchanged.");
+    } catch (cause) {
+      setError(messageOf(cause));
+    } finally {
+      setSavingOutcomeForecastId(null);
+    }
+  }
+
   return (
     <DonorShell
       activeLabel="Dashboard"
@@ -413,13 +452,51 @@ export function DonorForecastPage() {
             <SectionHeading description="Only your forecasts are shown here." title="Previous forecasts" />
             {loadingHistory ? <LoadingState label="Loading forecasts" /> : forecasts.length === 0
               ? <EmptyState description="Saved estimates will appear after a successful prediction." title="No forecasts yet" />
-              : <div className="donor-forecast-history">{forecasts.slice(0, 5).map((forecast) => (
-                <div className="donor-forecast-history-row" key={forecast.id}>
-                  <strong>{forecast.predicted_quantity.toLocaleString()} {forecast.unit}</strong>
-                  <span>{forecast.food_category.replaceAll("_", " ")} · {forecast.status}</span>
-                  <small>{dateLabel(forecast.created_at)}</small>
-                </div>
-              ))}</div>}
+              : <div className="donor-forecast-history">{forecasts.map((forecast) => {
+                const outcome = outcomes.find((candidate) => candidate.forecast_id === forecast.id);
+                const ready = new Date(forecast.ready_at).getTime() < Date.now();
+                return (
+                  <div className="donor-forecast-history-row" key={forecast.id}>
+                    <strong>Predicted: {forecast.predicted_quantity.toLocaleString()} {forecast.unit}</strong>
+                    <span>{forecast.food_category.replaceAll("_", " ")} · {forecast.status}</span>
+                    <small>Forecast ready {dateLabel(forecast.ready_at)} · created {dateLabel(forecast.created_at)}</small>
+                    {outcome ? (
+                      <div className="donor-outcome-summary">
+                        <strong>Measured surplus: {outcome.actual_surplus_quantity.toLocaleString()} {outcome.unit}</strong>
+                        <small>Observed {dateLabel(outcome.observed_at)}</small>
+                        {(outcome.actual_sales !== null || outcome.actual_customers !== null) && (
+                          <small>
+                            {outcome.actual_sales !== null ? `Sales: ${outcome.actual_sales.toLocaleString()}` : ""}
+                            {outcome.actual_sales !== null && outcome.actual_customers !== null ? " · " : ""}
+                            {outcome.actual_customers !== null ? `Customers / orders: ${outcome.actual_customers.toLocaleString()}` : ""}
+                          </small>
+                        )}
+                      </div>
+                    ) : !ready ? (
+                      <small>Outcome recording opens after the forecast ready time.</small>
+                    ) : !outcomesAvailable ? (
+                      <small>Outcome history could not be loaded. Recording is unavailable until it can be checked.</small>
+                    ) : activeOutcomeForecastId === forecast.id ? (
+                      <ForecastOutcomeForm
+                        busy={savingOutcomeForecastId === forecast.id}
+                        forecast={forecast}
+                        onCancel={() => setActiveOutcomeForecastId(null)}
+                        onSubmit={submitOutcome}
+                      />
+                    ) : (
+                      <Button
+                        className="donor-outcome-trigger"
+                        disabled={Boolean(savingOutcomeForecastId)}
+                        onClick={() => setActiveOutcomeForecastId(forecast.id)}
+                        size="sm"
+                        variant="outline"
+                      >
+                        Record actual outcome
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}</div>}
           </Card>
           <InlineAlert tone="info" title="No production history yet">The bundled model was evaluated on synthetic development data. Replace it with real restaurant history before relying on forecasts operationally.</InlineAlert>
         </aside>
@@ -457,7 +534,7 @@ const donationUnits: Array<{ value: DonationRow["unit"]; label: string }> = [
 export function DonationFormPage() {
   const { donationId } = useParams();
   const isEditing = Boolean(donationId);
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [draft, setDraft] = useState<DonationDraft>({
@@ -524,6 +601,10 @@ export function DonationFormPage() {
   async function save(status: "draft" | "available") {
     if (!supabase || !session) { setError(supabaseConfigurationError ?? "Sign in to save a donation."); return; }
     if (busy) return;
+    if (!session.user.id || profile?.id !== session.user.id || profile.role !== "donor") {
+      setError("Your donor profile could not be verified. Refresh your account or sign out and sign in again.");
+      return;
+    }
     const formError = validateDonation(draft, status);
     if (formError) { setError(formError); return; }
     if (draft.photo && validateFoodImage(draft.photo)) { setError(validateFoodImage(draft.photo)); return; }
@@ -563,10 +644,13 @@ export function DonationFormPage() {
       } else {
         savedId = await createDonation(supabase, session.user.id, values);
       }
-      navigate(`/donor/donations/${savedId}`, {
-        replace: false,
-        state: { success: status === "draft" ? "Draft saved." : "Donation published." },
-      });
+      navigate(
+        isEditing ? `/donor/donations/${savedId}` : "/donor/donations",
+        {
+          replace: false,
+          state: { success: status === "draft" ? "Draft saved." : "Donation published." },
+        },
+      );
     } catch (caught) {
       let detail = formatDonationSaveError(caught);
       if (uploadedPath) {
@@ -676,6 +760,7 @@ const donationFilters: Array<{ value: DonationFilter; label: string }> = [
 
 export function MyDonationsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { data, error, loading, reload } = useDonorData();
   const [filter, setFilter] = useState<DonationFilter>("all");
   const [cancelTarget, setCancelTarget] = useState<DonationRow | null>(null);
@@ -691,6 +776,7 @@ export function MyDonationsPage() {
     });
   }, [data, filter]);
   const requestedIds = new Set((data?.requests ?? []).filter((request) => ["pending", "confirmed", "picked_up"].includes(request.status)).map((request) => request.donation_id));
+  const success = (location.state as { success?: string } | null)?.success;
 
   async function cancelDonation() {
     if (!supabase || !cancelTarget || cancelBusy) return;
@@ -705,6 +791,7 @@ export function MyDonationsPage() {
 
   return (
     <DonorShell activeLabel="My Donations" action={<Button icon={<Plus size={16} />} onClick={() => navigate("/donor/donations/new")}>Create Donation</Button>} description="Track, edit, or cancel your food listings." title="My Donations">
+      {success && <InlineAlert tone="success">{success}</InlineAlert>}
       {mutationError && <ErrorState description={mutationError} />}
       <div aria-label="Filter donations by status" className="donor-filter-tabs" role="tablist">
         {donationFilters.map((option) => (
@@ -857,14 +944,15 @@ export function PickupRequestsPage() {
     if (!supabase || !action || busy) return;
     setBusy(true);
     setMutationError(null);
-    const { error: reviewError } = await supabase.rpc("review_pickup_request", {
-      p_request_id: action.request.request_id,
-      p_action: action.action,
-    });
-    setBusy(false);
-    if (reviewError) { setMutationError(reviewError.message); return; }
-    setAction(null);
-    await reload();
+    try {
+      await reviewPickupRequest(supabase, action.request.request_id, action.action);
+      setAction(null);
+      await reload();
+    } catch (reviewError) {
+      setMutationError(messageOf(reviewError));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
